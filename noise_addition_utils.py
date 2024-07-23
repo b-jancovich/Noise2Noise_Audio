@@ -14,7 +14,6 @@ import torchaudio
 # Set Audio backend as Sounfile for windows and Sox for Linux
 torchaudio.set_audio_backend("soundfile")
 
-
 def ms(x):
     return (np.abs(x)**2).mean()
 
