@@ -1,0 +1,11 @@
+Top contributing original audio features (explaining 90% of variance):
+1. pitch (Contribution: 64.98%)
+2. spectralRolloffPoint (Contribution: 53.60%)
+3. mfcc_1 (Contribution: 43.67%)
+4. gtcc_1 (Contribution: 25.19%)
+5. mfcc_2 (Contribution: 1.37%)
+6. gtcc_2 (Contribution: 0.75%)
+7. mfccDelta_1 (Contribution: 0.55%)
+8. mfcc_3 (Contribution: 0.27%)
+9. mfcc_4 (Contribution: 0.25%)
+10. gtcc_3 (Contribution: 0.25%)

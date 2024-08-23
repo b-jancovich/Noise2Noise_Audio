@@ -2,11 +2,13 @@
 # $ conda create --name <env> --file <this file>
 # platform: win-64
 
-# These packages are no longer available via conda. Use pip instead:
-# pesq=0.0.2=pypi_0
-# pypesq=1.2.4=pypi_0
-# pystoi=0.3.3=pypi_0
+# These packages are no longer available via conda. They will cause errors with Conda.
+# If using Conda, comment these out and conda & use pip instead:
+pesq=0.0.2=pypi_0
+pypesq=1.2.4=pypi_0
+pystoi=0.3.3=pypi_0
 
+# Valid Conda packages as of 25/07/24
 anyio=2.2.0=py38haa244fe_0
 argon2-cffi=20.1.0=py38h294d835_2
 async_generator=1.10=py_0

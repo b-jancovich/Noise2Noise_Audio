@@ -1,0 +1,169 @@
+% Noise Library Builder
+% Step 2 of n2n train-test dataset builder 
+%
+% Extracts subsequences of audio that do not contain the signal of interest
+% Based on the original n2n_whale_song_dataset_builder_STEP1.m script
+%
+% Ben Jancovich, 2024
+% Centre for Marine Science and Innovation
+% School of Biological, Earth and Environmental Sciences
+% University of New South Wales, Sydney, Australia
+
+clear
+close all
+clc
+
+%% Load project configuration file
+
+here = pwd;
+run(fullfile(here, 'config.m'));
+disp('Loaded N2N Config file.')
+
+%% Load detections, Clean Up and Build POSIX Dates
+
+detectionsFiles = dir(fullfile(detectionsPath, '*.mat'));
+
+% Calculate expected number of samples
+expected_num_samples = (call_duration + (buffer_duration*2)) * Fs + 1;
+
+% Preallocate cell array for faster concatenation
+tempTables = cell(length(detectionsFiles), 1);
+
+for i = 1:length(detectionsFiles)
+    data = load(fullfile(detectionsPath, detectionsFiles(i).name), 'detections');
+    tempTables{i} = array2table(data.detections, 'VariableNames', ...
+        {'Year', 'JulianDay', 'Month', 'Week', 'Time', 'SNR', 'SINR', 'SNRClass'});
+    disp(['Loaded Detections File: ', detectionsFiles(i).name])
+end
+
+% Concatenate all tables at once
+detectionsAll = vertcat(tempTables{:});
+
+% Remove invalid detections (missing SNR, SINR)
+validDetection = ~(isnan(detectionsAll.SNR) | isnan(detectionsAll.SINR) | ...
+    isinf(detectionsAll.SNR) | isinf(detectionsAll.SINR));
+detectionsAll = detectionsAll(validDetection, :);
+
+% DetectionsAll field "Time" is in MATLAB's serial "datenum" format 
+% (fractional days since January 01, 0000)
+% Convert serial time to Posix Time and sort detections
+detectionsAll.datetime_Readable = datetime(detectionsAll.Time, 'ConvertFrom', 'datenum');
+detectionsAll.posix_time = (detectionsAll.Time - datenum('1970-01-01')) * 86400;
+
+%% Filter list of detections by defining a minimim time separtation
+
+% Calculate the minimum separation between detection timestamps to qualify
+% a period of time as "song-free". Posix time is in seconds.
+maxSongLength = (call_duration * safetyFactor) + (buffer_duration * safetyFactor);
+minimumSongSeparationPosix = maxSongLength + interCallInterval * safetyFactor; 
+minimumSongSeparationSamps = minimumSongSeparationPosix * Fs; 
+
+% Sort detectionsAll by posix_time
+detectionsAll = sortrows(detectionsAll, 'posix_time');
+
+% Calculate time differences between consecutive rows
+timeDiffs = diff(detectionsAll.posix_time);
+
+% Find indices where the time difference is greater than or equal to minimumSongSeparationPosix
+validIndices = find(timeDiffs >= minimumSongSeparationPosix);
+
+% Create a logical array for filtering
+filterMask = false(height(detectionsAll), 1);
+filterMask(validIndices) = true;
+filterMask(validIndices + 1) = true;
+
+% Apply the filter to detectionsAll
+filteredDetections = detectionsAll(filterMask, :);
+
+% Display the results
+disp(['Number of raw detections: ', num2str(height(detectionsAll))]);
+disp('Filtering detections by temporal separation...');
+
+% Clear unused vars
+clearvars detectionsAll detectionsFiles data tempTables
+
+%% Get time indices of song-free periods
+
+noiseLibrary = struct("Year", [], "startTimePosix", [], "endTimePosix", [], ...
+    "separation2Next_Minutes", [], "audioFilename", [],  "audio", []);
+nDetections = height(filteredDetections);
+nIdx = 1;
+for i = 1:nDetections-1
+        % Get current and next detections's start and end times
+        currentDetectionStart = filteredDetections{i,"posix_time"};
+        currentDetectionEnd = currentDetectionStart + maxSongLength;
+        nextDetectionStart = filteredDetections{i+1,"posix_time"} - maxSongLength;
+
+        % Calculate seconds between end of this detection and start of next detection:
+        currentToNextSeparationPosix = nextDetectionStart - currentDetectionEnd;
+
+        % If separation between detections is big enough, record this 
+        % time period in the library as a noise sample:
+        if currentToNextSeparationPosix > minimumSongSeparationPosix
+
+            % Record the year of the noise sample
+            noiseLibrary(nIdx).Year = filteredDetections{i, "Year"};
+
+            % Record the start timestamp of noise-only period
+            noiseLibrary(nIdx).startTimePosix = currentDetectionEnd;
+
+            % Record the time separation
+            noiseLibrary(nIdx).separation2Next_Minutes = currentToNextSeparationPosix/60;
+
+            % Record the End timestamp of noise-only period
+            noiseLibrary(nIdx).endTimePosix = nextDetectionStart;
+
+            % Increment counter
+            nIdx = nIdx + 1;
+        end
+end
+
+disp(['Number of song-free time periods identified: ', num2str(nIdx)]);
+
+%% Get the Audio corresponing to these song-free periods
+
+% Pre-allocate arrays
+nDetections = length(noiseLibrary);
+wav_subdir_paths = strings(nDetections, 1);
+detection_datestrings = strings(nDetections, 1);
+
+% Pre-compute common values
+for i = 1:nDetections
+    % Get wav subdirectory paths
+    wav_subdir_paths(i) = fullfile(rawAudioPath, [wav_subdir_prefix, num2str(noiseLibrary(i).Year)], 'wav/');
+        % Convert POSIX time to MATLAB datenum
+    datenum_time = posixTime / 86400 + datenum('1970-01-01');
+    
+    % Format the datenum as a string
+    timeString = datestr(datenum_time, 'yymmdd-HHMMSS');
+    % detection_datestrings(i) = string(datestr(noiseLibrary(i).startTimePosix, wav_dateformat_serial));
+end
+
+% Cache directory listings outside the loop
+wav_files_cache = containers.Map();
+
+for i = 1:nDetections
+    if ~isKey(wav_files_cache, wav_subdir_paths(i))
+        wav_files_cache(wav_subdir_paths(i)) = dir(fullfile(wav_subdir_paths(i), '*.wav'));
+    end
+end
+
+% Find the largest iteration number from existing files
+start_iteration = findLatestFile(isolated_detections_wav_path) + 1;
+
+disp(['Starting from iteration: ', num2str(start_iteration)]);
+
+for i = start_iteration:nDetections
+    wavs_filelist = wav_files_cache(wav_subdir_paths(i));  % Use the cached list
+    wav_filename = find_closest_wav(wavs_filelist, char(detection_datestrings(i)));
+    wav_fileName= fullfile(wav_subdir_paths(i), wav_filename);
+
+    % Retrieve audio file, trim to region of interest, save trimmed file:
+    [successFlag, detectionsAll.audioFilename(i)] = findROI_wavWriter(...
+        wav_fileName, wavs_filelist, isolated_detections_wav_path, detection_datestrings(i), ...
+        i, detectionsAll.datetime_Readable(i), detectionsAll.SNR(i), ...
+        expected_num_samples, call_duration, buffer_duration);
+end
+
+% Remove rows where audio wasn't saved
+detectionsAll = detectionsAll(detectionsAll.audioFilename ~= "", :);

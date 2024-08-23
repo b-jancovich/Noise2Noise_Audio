@@ -177,18 +177,18 @@ def gen_colored_gaussian_noise(file_path='./sample_audio.wav', snr=10, color='wh
     noised_audio = un_noised_file + added_noise
     '''
     noised_audio = mynoise(un_noised_file,snr)
-    #print("Genned SNR:",check_snr(un_noised_file,noised_audio))
+    # print("Genned SNR:",check_snr(un_noised_file,noised_audio))
     return noised_audio
 
 
-
 def load_audio_file(file_path='./sample_audio.wav'):
-    #waveform, _ = torchaudio.load(file_path)
-    #waveform = waveform.numpy()
-    #waveform = np.reshape(waveform, -1)
+    # waveform, _ = torchaudio.load(file_path)
+    # waveform = waveform.numpy()
+    # waveform = np.reshape(waveform, -1)
     fs, waveform = wavfile.read(file_path)
-    #print(waveform)
+    # print(waveform)
     return waveform
+
 
 def save_audio_file(np_array=np.array([0.5]*1000),file_path='./sample_audio.wav', sample_rate=48000, bit_precision=16):
     np_array = np_array.flatten()
