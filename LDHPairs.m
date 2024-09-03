@@ -46,6 +46,8 @@ function dissimilarPairs = LDHPairs(ads, soiHiFreq, soiLoFreq, ...
         fprintf('Processed batch %d of %d\n', batchCount, numBatches);
     end
 
+    disp('Pre-processing, Feature Extraction and Hashing completed.')
+    disp('Starting dissimilarity Matching....')
     % Find dissimilar pairs
     dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs);
 end
@@ -91,10 +93,6 @@ function processBatch(ads, windowFull, b, a, Fs, windowLen, overlapPercent, ...
         fileIndex = ads.CurrentFileIndex + i - ads.MiniBatchSize - 1;
         fileID = fileIDs(fileIndex);
         updateHashTables(signature, fileID, allHashTables, hashTables, bandSize);
-    end
-
-    if mod(ads.CurrentFileIndex, 100) == 0
-        fprintf('Processed file %d\n', ads.CurrentFileIndex);
     end
 end
 
@@ -195,7 +193,11 @@ function dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs)
                 end
             end
         end
+        fprintf('Updated dissimilarity matrix with hash table %d of %d\n', i, length(allHashTables))
     end
+
+    disp('Finished updating hash tables.')
+    disp('Beginning matrix sorting...')
 
     % Convert similarity to dissimilarity
     dissimilarityMatrix = length(allHashTables) - dissimilarityMatrix;
@@ -205,7 +207,7 @@ function dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs)
     
     dissimilarPairs = [];
     availableSignals = true(1, nSignals);
-    
+    pairsCount = 1;
     while sum(availableSignals) >= 2
         [maxVal, maxIdx] = max(dissimilarityMatrix(:));
         if maxVal <= 0
@@ -223,5 +225,8 @@ function dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs)
         dissimilarityMatrix(:, row) = -1;
         dissimilarityMatrix(col, :) = -1;
         dissimilarityMatrix(:, col) = -1;
+
+        fprintf('Generated pair# %d).\n', pairsCount)
+        pairsCount = pairsCount+1;
     end
 end

@@ -23,6 +23,10 @@ disp('Loaded N2N Config file.')
 
 detectionsFiles = dir(fullfile(detectionsPath, '*.mat'));
 
+if isempty(detectionsFiles)
+    error('No detection files found - Check "detectionsPath".')
+end
+
 % Calculate expected number of samples
 expected_num_samples = (call_duration + (buffer_duration*2)) * Fs + 1;
 
@@ -86,9 +90,9 @@ clearvars detectionsAll detectionsFiles data tempTables
 
 noiseLibrary = struct("Year", [], "startTimePosix", [], "endTimePosix", [], ...
     "separation2Next_Minutes", []);
-nDetections = height(filteredDetections);
+nNoiseOnlySequences = height(filteredDetections);
 nIdx = 1;
-for i = 1:nDetections-1
+for i = 1:nNoiseOnlySequences-1
         % Get current and next detections's start and end times
         currentDetectionStart = filteredDetections{i,"posix_time"};
         currentDetectionEnd = currentDetectionStart + maxSongLength;
@@ -123,10 +127,10 @@ disp(['Number of song-free time periods identified: ', num2str(nIdx)]);
 %% Get the Audio corresponing to these song-free periods
 
 % Count Detections
-nDetections = length(noiseLibrary);
+nNoiseOnlySequences = length(noiseLibrary);
 
 % Pre-compute paths and start time strings
-for i = 1:nDetections
+for i = 1:nNoiseOnlySequences
     % Get wav subdirectory paths
     noiseLibrary(i).wavSubDirPath = fullfile(rawAudioPath, [wav_subdir_prefix, num2str(noiseLibrary(i).Year)], 'wav/');
         
@@ -140,20 +144,30 @@ end
 % Cache directory listings outside the main audio retrieval loop
 wav_files_cache = containers.Map();
 
-for i = 1:nDetections
+for i = 1:nNoiseOnlySequences
     if ~isKey(wav_files_cache, noiseLibrary(i).wavSubDirPath)
         wav_files_cache(noiseLibrary(i).wavSubDirPath) = dir(fullfile(noiseLibrary(i).wavSubDirPath, '*.wav'));
     end
 end
 
 % Get then wavs and return the ROI
-for i = 1:nDetections
+for i = 1:nNoiseOnlySequences
     wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);  % Use the cached list
     wav_filename = find_closest_wav(wavs_filelist, char(noiseLibrary(i).startTimeDatestrings));
 
+    if isempty(wavs_filelist)
+        error('No wav files found - Check wav file paths and that storage volume is mounted.')
+    end
+
     % Retrieve audio file, trim/append to region of interest, write to struct:
-    [noiseLibrary(i).audioData, ~, successFlag] = assembleROIAudio(...
+    [audioData, ~, successFlag] = assembleROIAudio(...
         wavs_filelist, noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTimePosix, noiseLibrary(i).endTimePosix);
+
+    if successFlag == true
+        fileName = ['DGS_noise_', noiseLibrary(i).startTimeDatestrings, '.wav'];
+        fullNamePath = fullfile(noise_lib_path, fileName);
+        audiowrite(fullNamePath, audioData, Fs);
+    end
 end
 
 % Randomly select 10 rows from noiseLibrary and plot the spectrogram of the audioData
@@ -168,21 +182,6 @@ for i = 1:nToPlot
     spectrogram(audio, 256, floor(256*0.9), 1024, Fs, 'yaxis');
     title(sprintf('Sample %d (Year: %d)', i, noiseLibrary(idx).Year));
     sgtitle('Spectrograms of 10 Random Noise Samples')
-end
-
-% Ask the user if they want to save the noiseLibrary
-user_response = input('Would you like to save the noiseLibrary? (y/n): ', 's');
-
-if strcmpi(user_response, 'y')
-    % Define the filename for saving
-    save_filename = fullfile(noiseLibraryPath, 'noiseLibrary.mat');
-    
-    % Save the noiseLibrary
-    save(save_filename, 'noiseLibrary');
-    
-    fprintf('noiseLibrary has been saved to %s\n', save_filename);
-else
-    fprintf('noiseLibrary was not saved.\n');
 end
 
 

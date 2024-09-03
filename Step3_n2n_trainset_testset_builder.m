@@ -9,6 +9,12 @@ clear
 close all
 clc
 
+%% Load project configuration file
+
+here = pwd;
+run(fullfile(here, 'config.m'));
+disp('Loaded N2N Config file.')
+
 %% Build the datastore
 
 % Create AudioDatastore
@@ -20,14 +26,17 @@ ads = batchAudioDatastore(isolated_detections_wav_path, ...
 %% Test Which Features To Use for (Dis)similarity Hashing
 
 % Compute window size
-Fs = ads.SampleRate;
 windowLen = floor(stationarityThreshold * Fs); % Length of analysis window (samples)
 
 % Select features that are the best descriptors of signal dissimilarity.
 features = selectAudioFeatures(ads, windowLen, overlapPercent, nFFT, sampleSize, p);
 featuresToUse = features.featureNames;
 
+disp('Selected most salient features.')
+
 %% Local (Dis)Similarity Hashing
+
+disp('Beginning Local Dissimilarity Hashing...')
 
 % Run LDH Matching using selected features
 reset(ads)
@@ -85,13 +94,35 @@ end
 
 save(fullfile(n2n_dataset_root, 'signalPairs.mat'), 'signalPairs', '-v7.3'); 
 
+clearvars signalPairs dissimilarPairs featuresToUse features
+
 %% Prepare to build the testing dataset
 
 % Load the noiseless detection from which to build the test dataset.
 [noiseless_detection, ~] = audioread(noiseless_detection_path);
 
-% Load the library of noise samples
-load(noise_lib_path);
+% Get the list of noise samples
+noiseFileList = dir(fullfile(noise_lib_path, '*.wav'));
+
+% Extract year from filename and add it as a new field to noiseFileList
+for i = 1:length(noiseFileList)
+    % Extract the date-time string from the filename
+    dateTimeStr = regexp(noiseFileList(i).name, '\d{6}-\d{6}', 'match');
+    
+    if ~isempty(dateTimeStr)
+        % Extract the first two digits of the date-time string
+        yearStr = dateTimeStr{1}(1:2);
+        
+        % Convert to full year (assuming 20xx)
+        fullYear = str2double(['20', yearStr]);
+        
+        % Add the year as a new field to the structure
+        noiseFileList(i).year = fullYear;
+    else
+        % If no date-time string found, set year to NaN
+        noiseFileList(i).year = NaN;
+    end
+end
 
 % Preprocess clean audio (Normalize and DC Subtract)
 noiseless_detection = noiseless_detection ./ max(abs(noiseless_detection));
@@ -115,7 +146,7 @@ sigma = (snrRange(2) - snrRange(1)) / 4;
 pd = makedist('Normal', 'mu', snrMean, 'sigma', sigma);
 trunc_pd = truncate(pd, snrRange(1), snrRange(2));
 SNRs = random(trunc_pd, nTestingPairs, 1);
-nYears = length([noiseLibrary.year]); % number of years of data in noise library
+nYears = length(unique([noiseFileList.year])); % number of years of data in noise library
 totalShift = shiftRate * nYears; % total change in call frequency over nYears (Hz)
 endFreq = initialFreq - totalShift; % Final frequency after nYears (Hz)
 stRealChange = 12 * log2(endFreq / initialFreq); % Monopolar range of random pitch shift (semitones)
@@ -130,7 +161,7 @@ stAugRangeBipolar = (stRealChange * 1.2) / 2; % Total range of random pitch shif
 disp("Building data augmentation object...")
 
 % Set up augmentation object
-augmenter = audioDataAugmenter('AugmentationParameterSource','random', ...
+augmenter = noiseDataAugmenter('AugmentationParameterSource','random', ...
                             'NumAugmentations', nTestingPairs, ...
                             "AugmentationMode","sequential", ...
                             ... % Time Stretching
@@ -194,45 +225,38 @@ corruptedSignals = cell(nTestingPairs, 1);
 % Generate synthetic data
 for i = 1:nTestingPairs
     % Randomly select a noise vector year:
-    randomYear = randi([min([noiseLibrary.Year]), max([noiseLibrary.Year])]);
+    randomYear = randi([min([noiseFileList.year]), max([noiseFileList.year])]);
 
-    % Find indices of rows in noiseLibrary with matching year
-    matchingYearIndices = find([noiseLibrary.Year] == randomYear);
+    % Find indices of rows in noiseLibrary with matching Year
+    matchingYearIndices = find([noiseFileList.year] == randomYear);
     
     % Randomly select one of these rows
     noiseYearIdx = matchingYearIndices(randi(length(matchingYearIndices)));
-    
-    % Get the length of the audioData for that row
-    len = length(noiseLibrary(noiseYearIdx).audioData);
+
+    % Load the Audio for that row
+    [noiseData, ~] = audioread(fullfile(noise_lib_path, noiseFileList(noiseYearIdx).name));
     
     % Randomly select a starting index for the noise subsequence
-    startIdx = randi(len - ads.SignalLength + 1);
+    startIdx = randi(length(noiseData) - ads.SignalLength + 1);
     
     % Extract the noise subsequence
-    signalNoise = noiseLibrary(noiseYearIdx).audioData(startIdx:startIdx + ads.SignalLength - 1);
+    noiseData = noiseData(startIdx:startIdx + ads.SignalLength - 1);
     
     % Ensure the noise is a column vector
-    signalNoise = signalNoise(:);
+    noiseData = noiseData(:);
 
     % DC Filter the noise
-    signalNoise = signalNoise - mean(signalNoise);
+    noiseData = noiseData - mean(noiseData);
 
     % Extract this iterations's clean signal, ensuring it is a column vec
     signalClean = cleanSignals.Audio{i}(:);
 
     % Scale the signalNoise and signalClean to the specified SNR
-    signalCorrupted = sigNoiseMixer(signalClean, signalNoise, SNRs(i), 1);
+    signalCorrupted = sigNoiseMixer(signalClean, noiseData, SNRs(i), 1);
        
     % Normalize the corrupted signal
-    corruptedSignals{i} = signalCorrupted ./ max(abs(signalCorrupted));
-    disp(['Completed corrupted training sample # ', num2str(i)])
-end
+    signalCorrupted = signalCorrupted ./ max(abs(signalCorrupted));
 
-%% Save out data
-
-disp("Saving training and testing datasets...")
-
-for i = 1:nTesting
     % Filename for clean "groundtruth" Data
     fileNameTestGT = fullfile(n2n_test_groundTruth, ...
         ['testing_groundtruth_signal_', num2str(i),'.wav']);
@@ -242,10 +266,10 @@ for i = 1:nTesting
         ['test_input_signal_', num2str(i), '_SNR_', num2str(SNRs(i)), 'dB.wav']);
 
     % Save clean data to disk
-    audiowrite(fileNameTestGT, cleanSignals.Audio{i}, Fs);
+    audiowrite(fileNameTestGT, signalClean, Fs);
 
     % Save clean+noise data to disk
-    audiowrite(fileNameTestCorrupted, corruptedSignals{i}, Fs);
+    audiowrite(fileNameTestCorrupted, signalCorrupted, Fs);
 end
 
 %% Helper Functions:

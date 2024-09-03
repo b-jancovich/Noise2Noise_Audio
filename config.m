@@ -23,10 +23,10 @@ isolated_detections_wav_path = 'D:\Isolated_Detection_Wavs';
 
 % Init Parameters
 interCallInterval = 195; % Duration of silence between song repetitions (seconds)
-safetyFactor = 4; % Safety factor in calculating time separation between detections
+safetyFactor = 6; % Safety factor in calculating time separation between detections
 
 % Paths
-noiseLibraryPath = "C:\Users\z5439673\OneDrive - UNSW\H0419778\CTBTO_HA08S_noise_library\noiseLibrary.mat";
+noise_lib_path = "D:\DGS_noise_library";
 
 %% Step 3 - n2n_trainset_testset_builder
 
@@ -43,7 +43,7 @@ miniBatchSize = 5000; % Number of files to process in each LSH Batch
 p = 95; % Amount of variance in signals to be explained by selected features (%)
 overlapPercent = 75; % Overlap between analysis windows (%)
 nFFT = 1024; % Number of FFT points
-sampleSize = 2500; % Number of audio files to randomly sample for feature selection.
+sampleSize = 1500; % Number of audio files to randomly sample for feature selection.
 stationarityThreshold = 0.2; % The longest duration over which the signals  
 %                           in the recordings can be considered to be "stationary" (s)
 
@@ -67,11 +67,10 @@ c = 1500; % Approximate propagation velocity in water (m/s)
 % Output path for isolated detection wavs
 isolated_detections_wav_path = 'D:\Isolated_Detection_Wavs';
 
+noise_lib_path = "D:\DGS_noise_library";
+
 % Path to noiseless copy of signal:
 noiseless_detection_path = "C:\Users\z5439673\Git\localisation_and_source_level_est\2_DATA\H08S1_02-Aug-2015_23-26-43_Chagos_Song_SPECTRAL_DENOISE_RX.wav";
-
-% Path to noise library:
-noise_lib_path = "C:\Users\z5439673\Git\localisation_and_source_level_est\2_DATA\NoiseSamples\noiseStruct.mat";
 
 % Output data paths:
 n2n_dataset_root = 'C:\Users\z5439673\OneDrive - UNSW\H0419778\Noise2Noise_Audio';
