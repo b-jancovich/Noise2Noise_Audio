@@ -31,6 +31,9 @@ noise_lib_path = "D:\DGS_noise_library";
 %% Step 3 - n2n_trainset_testset_builder
 
 % Init Parameters
+% Initial signal selection
+minSNR = -20; % The lowest SNR signals to include in the training dataset
+
 % Dissimilarity Matching Variables
 soiHiFreq = 60; % the highest freq in the signal of interest (Hz)
 soiLoFreq = 25; % the lowest freq in the signal of interest (Hz)

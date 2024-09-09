@@ -1,4 +1,4 @@
-% n2n_trainset_testset_builder_STEP3.m
+% n2n_testset_builder_STEP4.m
 
 % Ben Jancovich, 2024
 % Centre for Marine Science and Innovation
@@ -15,86 +15,13 @@ here = pwd;
 run(fullfile(here, 'config.m'));
 disp('Loaded N2N Config file.')
 
-%% Build the datastore
+%% Build the Training set datastore to get matching signal lengths & Fs
 
 % Create AudioDatastore
 ads = batchAudioDatastore(isolated_detections_wav_path, ...
     'FileExtensions', '.wav', ...
     'MiniBatchSize', miniBatchSize, ...
     'LabelSource', 'fileNames');
-
-%% Test Which Features To Use for (Dis)similarity Hashing
-
-% Compute window size
-windowLen = floor(stationarityThreshold * Fs); % Length of analysis window (samples)
-
-% Select features that are the best descriptors of signal dissimilarity.
-features = selectAudioFeatures(ads, windowLen, overlapPercent, nFFT, sampleSize, p);
-featuresToUse = features.featureNames;
-
-disp('Selected most salient features.')
-
-%% Local (Dis)Similarity Hashing
-
-disp('Beginning Local Dissimilarity Hashing...')
-
-% Run LDH Matching using selected features
-reset(ads)
-dissimilarPairs = LDHPairs(ads, soiHiFreq, soiLoFreq, ...
-    stationarityThreshold, overlapPercent, nFFT, fadeLen, featuresToUse);
-
-%% Test similarity
-nPairs = length(dissimilarPairs);
-similarity = zeros(nPairs, 1);
-rawMetrics = zeros(nPairs, 4);
-
-signalPairs = table('Size', [0, 3], ...
-    'VariableTypes', {'string', 'string', 'double'}, ...
-    'VariableNames', {'sig1', 'sig2', 'similarity'});
-
-% Get file paths and names for pairs & Test similarity
-for i = 1:nPairs
-    % Search "ads.Files.index" for dissimilarPair ID's
-    index1 = find([ads.Files.index] == dissimilarPairs(i, 1));
-    index2 = find([ads.Files.index] == dissimilarPairs(i, 2));
-
-    % Get paths to corresponding files
-    sig1 = fullfile(ads.Files(index1).folder, ads.Files(index1).name);
-    sig2 = fullfile(ads.Files(index2).folder, ads.Files(index2).name);
-
-    % Load files in the pair
-    [x1, ~] = audioread(sig1);
-    [x2, ~] = audioread(sig2);
-
-    % Get measure of similarity for each pair
-    [similarity, ~] = signalSimilarity(x1, x2, Fs);
-    fprintf('Similarity of pair # %d is %d\n', i, similarity)
-
-    % Put in table
-    signalPairs = [signalPairs; {sig1, sig2, similarity}];
-end
-
-% Sort similarity from least to most similar
-sortedT = sortrows(signalPairs, 'similarity', 'ascend');
-
-%% Save the training files out to their new locations in a batch script
-
-for i = 1:nTrainingPairs
-    
-    % Define new file paths, with new names for rename operation
-    destinationNewFileName_input = fullfile(n2n_train_inputs, ['train_input_', num2str(i), '.wav']);
-    destinationNewFileName_target = fullfile(n2n_train_targets, ['train_target_', num2str(i), '.wav']);
-
-    % Copy input & target files to new location with old names
-    copyfile(signalPairs.sig1{i}, destinationNewFileName_input);
-    copyfile(signalPairs.sig2{i}, destinationNewFileName_target);
-end
-
-%% Save the training dataset metadata
-
-save(fullfile(n2n_dataset_root, 'signalPairs.mat'), 'signalPairs', '-v7.3'); 
-
-clearvars signalPairs dissimilarPairs featuresToUse features
 
 %% Prepare to build the testing dataset
 

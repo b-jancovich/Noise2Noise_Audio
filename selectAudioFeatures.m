@@ -17,7 +17,7 @@ function featuresOut = selectAudioFeatures(ads, windowLen, overlapPercent, nFFT,
     %     .scores          - Vector of feature scores for the selected features
     %     .numFeatures     - Number of features that explain 90% of the difference
     %
-    % Ben Jancovich, 2024 (modified)
+    % Ben Jancovich, 2024
     % Centre for Marine Science and Innovation
     % School of Biological, Earth and Environmental Sciences
     % University of New South Wales, Sydney, Australia
@@ -70,7 +70,10 @@ function featuresOut = selectAudioFeatures(ads, windowLen, overlapPercent, nFFT,
         features{i} = extract(afe, audioData{i});
         % Normalize the features by their mean and standard deviation
         features{i} = (features{i} - mean(features{i},1))./std(features{i},[],1);
-        fprintf('Extracted features for randomly selected signal # %d\n', i)
+        % Print message only for every 100th signal
+        if mod(i, 100) == 0
+            fprintf('Extracted features for randomly selected signal # %d\n', i)
+        end
     end
 
     % Get feature names and column counts
