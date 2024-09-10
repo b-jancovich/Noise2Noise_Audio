@@ -2,7 +2,7 @@ function dissimilarPairs = LDHPairs_v2(ads, soiHiFreq, ...
     stationarityThreshold, overlapPercent, nFFT, fadeLen, featuresToUse)
     
     % Hashing Constants
-    hashTables = 20;
+    hashTables = 40;
     bandSize = 10;
 
     % Get the size of the dataset and signal info
@@ -49,7 +49,16 @@ function dissimilarPairs = LDHPairs_v2(ads, soiHiFreq, ...
     disp('Starting dissimilarity Matching....')
 
     % Find dissimilar pairs
-    dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs);
+    % dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs);
+
+    try
+        dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs);
+    catch ME
+        disp('Error occurred:');
+        disp(ME.message);
+        disp(ME.stack);
+    end
+
 end
 
 function windowFull = createFadeWindow(nSamples, fadeLen, Fs)
@@ -207,6 +216,7 @@ function dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs)
                     end
                 end
             end
+            fprintf('Completed pairing from bucket %d\n', j)
         end
     end
 
