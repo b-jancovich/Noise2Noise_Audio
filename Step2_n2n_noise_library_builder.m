@@ -279,3 +279,37 @@ end
 audioData = audioData - mean(audioData);
 
 end
+
+function filename = find_closest_wav(filelist, target_date_time)
+    % Convert the target date-time stamp to posixtime
+    target_posix = convert_to_posix(target_date_time);
+    
+    % Initialize the closest posixtime and filename
+    closest_posix = -inf;  % Changed from inf to -inf
+    filename = '';
+    
+    % Iterate over the files
+    for i = 1:length(filelist)
+        % Extract the date-time stamp from the file name
+        file_datetime_str = regexp(filelist(i).name, '\d+', 'match');
+        
+        % If there's no date-time stamp, skip this file
+        if isempty(file_datetime_str)
+            continue;
+        end
+        
+        % Convert the date-time stamp to posixtime
+        file_posix = convert_to_posix([file_datetime_str{1,3}, '-', file_datetime_str{1,4}]);
+        
+        % If the file's datetime is after the target, skip this file
+        if file_posix > target_posix
+            continue;
+        end
+        
+        % If the file's datetime is closer to the target than the current closest, update the closest
+        if file_posix > closest_posix  % Changed comparison logic
+            closest_posix = file_posix;
+            filename = filelist(i).name;
+        end
+    end
+end

@@ -17,7 +17,7 @@ disp('Loaded N2N Config file.')
 
 %% Build the datastore
 
-% % Debug test inputs
+% % % Debug test inputs
 % isolated_detections_wav_path = 'D:\LSH_TEST';
 % miniBatchSize = 100;
 % sampleSize = 200;
@@ -52,10 +52,20 @@ disp('Selected most salient features.')
 
 disp('Beginning Local Dissimilarity Hashing...')
 
+profile on
+
 % Run LDH Matching using selected features
 reset(ads)
 dissimilarPairs = LDHPairs_v2(ads, soiHiFreq, stationarityThreshold, ...
-    overlapPercent, nFFT, fadeLen, featuresToUse);
+    overlapPercent, nFFT, fadeLen, featuresToUse, hashTables, bandSize);
+
+profile off
+
+% Get the profile information
+p = profile('info');
+
+% Generate a report and save it as PDF
+profsave(p, fullfile(pwd, 'LDHPairs_profile_report_ismember_simple'));
 
 %% Test & Sort Pairs by Similarity (Max of 2D Cross Correlation)
 
@@ -192,7 +202,6 @@ if all(abs(s_mostSimCross(:)) == 0)
     text(20, 60, 'Delta = 0')
 end
 
-
 nexttile
 imagesc(t, f, mag2db(s_leastSim1))
 set(gca, "YDir", "normal")
@@ -229,19 +238,19 @@ end
 
 %% Save the training files out to their new locations
 
-for i = 1:nTrainingPairs
-
-    % Define new file paths, with new names for rename operation
-    destinationNewFileName_input = fullfile(n2n_train_inputs, ['train_input_', num2str(i), '.wav']);
-    destinationNewFileName_target = fullfile(n2n_train_targets, ['train_target_', num2str(i), '.wav']);
-
-    % Copy input & target files to new location with old names
-    copyfile(signalPairs.sig1{i}, destinationNewFileName_input);
-    copyfile(signalPairs.sig2{i}, destinationNewFileName_target);
-end
+% for i = 1:nTrainingPairs
+% 
+%     % Define new file paths, with new names for rename operation
+%     destinationNewFileName_input = fullfile(n2n_train_inputs, ['train_input_', num2str(i), '.wav']);
+%     destinationNewFileName_target = fullfile(n2n_train_targets, ['train_target_', num2str(i), '.wav']);
+% 
+%     % Copy input & target files to new location with old names
+%     copyfile(signalPairs.sig1{i}, destinationNewFileName_input);
+%     copyfile(signalPairs.sig2{i}, destinationNewFileName_target);
+% end
 
 %% Save the training dataset metadata
-
-save(fullfile(n2n_dataset_root, 'signalPairs.mat'), 'signalPairs', '-v7.3'); 
-clearvars signalPairs dissimilarPairs featuresToUse features
-
+% 
+% save(fullfile(n2n_dataset_root, 'signalPairs.mat'), 'signalPairs', '-v7.3'); 
+% clearvars signalPairs dissimilarPairs featuresToUse features
+% 

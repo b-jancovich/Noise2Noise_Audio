@@ -12,12 +12,18 @@ wav_dateformat_serial = 'yymmdd-HHMMSS';
 % Paths
 % Path to complete CTBTO dataset:
 rawAudioPath = "D:\Diego Garcia South";
+rawAudioPath = "/srv/scratch/z5439673/Diego Garcia";
+
 % Path to detection MAT Files:
 detectionsPath = "C:\Users\z5439673\OneDrive - UNSW\H0419778\Manue_Chagos_RawData\DGS";
+detectionsPath = "/srv/scratch/z5439673/Manue_Chagos_RawData/DGS";
+
 % String for CTBT Location Folder:
 wav_subdir_prefix = 'DiegoGarcia';
+
 % Output path for isolated detection wavs
 isolated_detections_wav_path = 'D:\Isolated_Detection_Wavs';
+isolated_detections_wav_path = "/srv/scratch/z5439673/Isolated_Detection_Wavs";
 
 %% Step 2 - Noise Library Builder
 
@@ -27,6 +33,7 @@ safetyFactor = 6; % Safety factor in calculating time separation between detecti
 
 % Paths
 noise_lib_path = "D:\DGS_noise_library";
+noise_lib_path = "/srv/scratch/z5439673/DGS_noise_library";
 
 %% Step 3 - n2n_trainset_testset_builder
 
@@ -41,6 +48,9 @@ fadeLen = 0.5; % Duration of fades at the start/end of audio file (s)
 nTrainingPairs = 15000; % Number of input-target pairs to build for training
 miniBatchSize = 5000; % Number of files to process in each LSH Batch 
 %                     (lower this if out-of-memory errors occur in LDHPairs)
+% Hashing Constants
+hashTables = 40;
+bandSize = 10;
 
 % Audio Feature Extraction variables
 p = 95; % Amount of variance in signals to be explained by selected features (%)
@@ -69,14 +79,19 @@ c = 1500; % Approximate propagation velocity in water (m/s)
 % Paths
 % Output path for isolated detection wavs
 isolated_detections_wav_path = 'D:\Isolated_Detection_Wavs';
+isolated_detections_wav_path = "/srv/scratch/z5439673/Isolated_Detection_Wavs";
 
 noise_lib_path = "D:\DGS_noise_library";
+noise_lib_path = "/srv/scratch/z5439673/DGS_noise_library";
 
 % Path to noiseless copy of signal:
 noiseless_detection_path = "C:\Users\z5439673\Git\localisation_and_source_level_est\2_DATA\H08S1_02-Aug-2015_23-26-43_Chagos_Song_SPECTRAL_DENOISE_RX.wav";
+noiseless_detection_path = "/home/z5439673/Git/localisation_and_source_level_est/2_DATA/H08S1_02-Aug-2015_23-26-43_Chagos_Song_SPECTRAL_DENOISE_RX.wav";
 
 % Output data paths:
 n2n_dataset_root = 'C:\Users\z5439673\OneDrive - UNSW\H0419778\Noise2Noise_Audio';
+n2n_dataset_root = '/srv/scratch/z5439673/Noise2Noise_Audio';
+
 n2n_train_inputs = fullfile(n2n_dataset_root, 'train_inputs');
 n2n_train_targets = fullfile(n2n_dataset_root, 'train_targets'); 
 n2n_test_inputs = fullfile(n2n_dataset_root, 'test_inputs');
