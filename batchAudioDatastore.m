@@ -45,7 +45,12 @@ classdef batchAudioDatastore < matlab.io.Datastore & matlab.io.datastore.MiniBat
     %       fileLabel = info.Labels;
     %
     %   See also audioDatastore, datastore, matlab.io.datastore.MiniBatchable
-
+    %
+    % Ben Jancovich, 2024
+    % Centre for Marine Science and Innovation
+    % School of Biological, Earth and Environmental Sciences
+    % University of New South Wales, Sydney, Australia
+    %
     properties
         Files
         MiniBatchSize

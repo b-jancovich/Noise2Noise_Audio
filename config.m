@@ -9,21 +9,25 @@ buffer_duration = 3;    % Time to add to the start and end of each detection (se
 Fs = 250;               % Sampling frequency of recordings (Hz)
 wav_dateformat_serial = 'yymmdd-HHMMSS';
 
-% Paths
-% Path to complete CTBTO dataset:
-rawAudioPath = "D:\Diego Garcia South";
-rawAudioPath = "/srv/scratch/z5439673/Diego Garcia";
-
-% Path to detection MAT Files:
-detectionsPath = "C:\Users\z5439673\OneDrive - UNSW\H0419778\Manue_Chagos_RawData\DGS";
-detectionsPath = "/srv/scratch/z5439673/Manue_Chagos_RawData/DGS";
+% Set Paths 
+if opEnv == 1 % If running locally
+    % Path to complete CTBTO dataset:
+    rawAudioPath = "D:\Diego Garcia South";
+    % Path to detection MAT Files:
+    detectionsPath = "C:\Users\z5439673\OneDrive - UNSW\H0419778\Manue_Chagos_RawData\DGS";
+    % Output path for isolated detection wavs
+    isolated_detections_wav_path = 'D:\Isolated_Detection_Wavs';
+else % If running on Katana
+    % Path to complete CTBTO dataset:
+    rawAudioPath = "/srv/scratch/z5439673/Diego Garcia";
+    % Path to detection MAT Files:
+    detectionsPath = "/srv/scratch/z5439673/Manue_Chagos_RawData/DGS";
+    % Output path for isolated detection wavs
+    isolated_detections_wav_path = "/srv/scratch/z5439673/Isolated_Detection_Wavs";
+end
 
 % String for CTBT Location Folder:
 wav_subdir_prefix = 'DiegoGarcia';
-
-% Output path for isolated detection wavs
-isolated_detections_wav_path = 'D:\Isolated_Detection_Wavs';
-isolated_detections_wav_path = "/srv/scratch/z5439673/Isolated_Detection_Wavs";
 
 %% Step 2 - Noise Library Builder
 
@@ -31,9 +35,14 @@ isolated_detections_wav_path = "/srv/scratch/z5439673/Isolated_Detection_Wavs";
 interCallInterval = 195; % Duration of silence between song repetitions (seconds)
 safetyFactor = 6; % Safety factor in calculating time separation between detections
 
-% Paths
-noise_lib_path = "D:\DGS_noise_library";
-noise_lib_path = "/srv/scratch/z5439673/DGS_noise_library";
+% Set Paths
+if opEnv == 1 % If running locally
+    % Noise Library Path
+    noise_lib_path = "D:\DGS_noise_library";
+else % If running on Katana
+    % Noise Library Path
+    noise_lib_path = "/srv/scratch/z5439673/DGS_noise_library";
+end
 
 %% Step 3 - n2n_trainset_testset_builder
 
@@ -76,24 +85,26 @@ hpfRange = [10, 32]; % Min/Max Cutoff Frequency Range for random HPF (Hz)
 SourceVelocityRange = [1, 50]; % Min/Max velocity of source for doppler shift (m/s)
 c = 1500; % Approximate propagation velocity in water (m/s)
 
-% Paths
-% Output path for isolated detection wavs
-isolated_detections_wav_path = 'D:\Isolated_Detection_Wavs';
-isolated_detections_wav_path = "/srv/scratch/z5439673/Isolated_Detection_Wavs";
-
-noise_lib_path = "D:\DGS_noise_library";
-noise_lib_path = "/srv/scratch/z5439673/DGS_noise_library";
-
-% Path to noiseless copy of signal:
-noiseless_detection_path = "C:\Users\z5439673\Git\localisation_and_source_level_est\2_DATA\H08S1_02-Aug-2015_23-26-43_Chagos_Song_SPECTRAL_DENOISE_RX.wav";
-noiseless_detection_path = "/home/z5439673/Git/localisation_and_source_level_est/2_DATA/H08S1_02-Aug-2015_23-26-43_Chagos_Song_SPECTRAL_DENOISE_RX.wav";
-
-% Output data paths:
-n2n_dataset_root = 'C:\Users\z5439673\OneDrive - UNSW\H0419778\Noise2Noise_Audio';
-n2n_dataset_root = '/srv/scratch/z5439673/Noise2Noise_Audio';
+% Set Paths
+if opEnv == 1 % If running locally
+    % Output path for isolated detection wavs
+    isolated_detections_wav_path = 'D:\Isolated_Detection_Wavs';
+    noise_lib_path = "D:\DGS_noise_library";
+    % Path to noiseless copy of signal:
+    noiseless_detection_path = "C:\Users\z5439673\Git\localisation_and_source_level_est\2_DATA\H08S1_02-Aug-2015_23-26-43_Chagos_Song_SPECTRAL_DENOISE_RX.wav";
+    % Output data paths:
+    n2n_dataset_root = 'C:\Users\z5439673\OneDrive - UNSW\H0419778\Noise2Noise_Audio';
+else % If running on Katana
+    % Output path for isolated detection wavs
+    isolated_detections_wav_path = "/srv/scratch/z5439673/Isolated_Detection_Wavs";
+    noise_lib_path = "/srv/scratch/z5439673/DGS_noise_library";
+    % Path to noiseless copy of signal:
+    noiseless_detection_path = "/home/z5439673/Git/localisation_and_source_level_est/2_DATA/H08S1_02-Aug-2015_23-26-43_Chagos_Song_SPECTRAL_DENOISE_RX.wav";
+    % Output data paths:
+    n2n_dataset_root = '/srv/scratch/z5439673/Noise2Noise_Audio';
+end
 
 n2n_train_inputs = fullfile(n2n_dataset_root, 'train_inputs');
 n2n_train_targets = fullfile(n2n_dataset_root, 'train_targets'); 
 n2n_test_inputs = fullfile(n2n_dataset_root, 'test_inputs');
-n2n_test_groundTruth = fullfile(n2n_dataset_root, 'test_groundtruth'); 
-
+n2n_test_groundTruth = fullfile(n2n_dataset_root, 'test_groundtruth');

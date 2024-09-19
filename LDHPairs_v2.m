@@ -132,14 +132,7 @@ function dissimilarPairs = LDHPairs_v2(ads, soiHiFreq, ...
     disp('Starting dissimilarity Matching....')
 
     % Run dissimilar pair matching
-    try
-        dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs);
-    catch ME
-        disp('Error occurred:');
-        disp(ME.message);
-        disp(ME.stack);
-    end
-
+    dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs);
 end
 
 %% createFadeWindow
@@ -356,7 +349,6 @@ function signature = generateLSHSignature(features, numHashes)
 
     [numFeatures, ~] = size(features);
     signature = false(1, numHashes);
-
     randomVectors = randn(numFeatures, numHashes);
     projections = features' * randomVectors;
     signature = median(projections, 1) > 0;
@@ -424,8 +416,7 @@ function dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs)
 %   4. Select most dissimilar pairs while ensuring each signal is used only once
 %
 % Note:
-%   This function uses Java's PriorityQueue for efficient heap operations
-
+%   This function uses Java's PriorityQueue for efficient heap operations.
 
     numHashTables = length(allHashTables);
     disp(['Number of hash tables: ', num2str(numHashTables)]);
@@ -433,8 +424,17 @@ function dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs)
     % Initialize a min-heap to store the most dissimilar pairs
     dissimilarityHeap = java.util.PriorityQueue();
 
+    % Set dissimilarityCounts type according to numHashTables
+    if numHashTables <= 127
+        countType = 'int8';
+    elseif numHashTables <= 32767
+        countType = 'int16';
+    else
+        countType = 'int32';
+    end
+
     % Process hash tables and update dissimilarity counts
-    dissimilarityCounts = containers.Map('KeyType', 'char', 'ValueType', 'int32');
+    dissimilarityCounts = containers.Map('KeyType', 'char', 'ValueType', countType);
 
     for i = 1:numHashTables
         disp(['Processing hash table ', num2str(i), ' of ', num2str(numHashTables)]);
@@ -458,6 +458,8 @@ function dissimilarPairs = findDissimilarPairs(allHashTables, nSignals, fileIDs)
             fprintf('Completed pairing from bucket %d\n', j)
         end
     end
+
+    clearvars bucket combinations
 
     disp('Finished processing hash tables. Beginning pair selection...');
 
