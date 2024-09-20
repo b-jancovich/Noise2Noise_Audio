@@ -20,7 +20,7 @@ clc
 %% Set Operating Environment
 % 1 = Use the paths in config.m that relate to my windows laptop
 % 2 = Use the paths in config.m that relate to the Katana Cluster
-opEnv = 1;
+opEnv = 0;
 
 % Compute file retrievals in serial or parallel:
 mode = 'parallel';
@@ -56,6 +56,11 @@ end
 
 % Concatenate all tables at once
 detectionsAll = vertcat(tempTables{:});
+
+% Make sure we have some detections
+assert(~isempty(detectionsAll), ['No detections found.', newline, ...
+    'Check operating environment setting.', newline ...
+    'Check file paths in "config.m".'])
 
 % Remove invalid detections
 validDetection = ~(isnan(detectionsAll.SNR) | isnan(detectionsAll.SINR) | ...
