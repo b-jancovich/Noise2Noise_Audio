@@ -166,12 +166,11 @@ switch mode
         
         % Pre-allocate audioFilename array
         audioFilename = strings(nDetections, 1);
-        
-        % Determine the number of workers (adjust as needed)
-        numWorkers = parcluster('local').NumWorkers;
-        
-        % Parallel Mode:
-        parfor (i = start_iteration:nDetections, numWorkers)
+
+        tic
+        ticBytes(gcp);
+
+        parfor i = start_iteration:nDetections
             % Access sliced variables
             wavs_filelist = wav_files_list{i};  % Use the precomputed list
             wav_filename = find_closest_wav(wavs_filelist, char(detection_datestrings(i)));
@@ -184,7 +183,9 @@ switch mode
                 expected_num_samples, call_duration, buffer_duration);
             audioFilename(i) = audioFilename_i;
         end
-        
+        tocBytes(gcp)
+        toc
+     
         % Assign the audio filenames back to detectionsAll
         detectionsAll.audioFilename = audioFilename;
         
