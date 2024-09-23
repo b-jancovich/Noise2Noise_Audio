@@ -197,60 +197,63 @@ switch mode
         % Stop execution timing
         toc
     case 'parallel'
-
-        % Cache directory listings outside the main audio retrieval loop
-
-        % Get unique wavSubDirPaths
-        % Extract the paths into an array of strings
-        cellArray = {noiseLibrary.wavSubDirPath};
-        % Concatenate into an array of strings
-        wavSubDirPaths = [cellArray{:}]; 
-        
-        % Get unique paths
-        unique_wavSubDirPaths = unique(wavSubDirPaths, 'stable');
-        numUniquePaths = length(unique_wavSubDirPaths);
-        wav_filelists = cell(numUniquePaths, 1);
-        
-        % Cache the dir() results
-        for k = 1:numUniquePaths
-            wav_filelists{k} = dir(fullfile(unique_wavSubDirPaths{k}, '*.wav'));
-        end
-        
-        % Map noiseLibrary(i).wavSubDirPath to index into unique_wavSubDirPaths
-        [~, idxInUnique] = ismember(wavSubDirPaths, unique_wavSubDirPaths);
-
-        % Prepare per-sequence wav_filelists
-        nNoiseOnlySequences = length(noiseLibrary);
-        wav_filelists_per_sequence = cell(nNoiseOnlySequences, 1);
-        for i = 1:nNoiseOnlySequences
-            wav_filelists_per_sequence{i} = wav_filelists{idxInUnique(i)};
-        end
-        
-        % Now process in parallel
         tic
-        ticBytes(gcp)
-        parfor i = 1:nNoiseOnlySequences
-            wavs_filelist = wav_filelists_per_sequence{i};
+        ticBytes(gcp);
+
+        % Number of noise sequences to process
+        numFutures = nNoiseOnlySequences;
         
-            if isempty(wavs_filelist)
-                error('No wav files found - Check wav file paths and that storage volume is mounted.')
-            end
-        
-            % Use the cached list
-            wav_filename = find_closest_wav(wavs_filelist, char(noiseLibrary(i).startTimeDatestrings));
-        
-            % Retrieve audio file, trim/append to region of interest, write to struct:
-            [audioData, ~, successFlag] = assembleROIAudio(...
-                wavs_filelist, noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTimePosix, noiseLibrary(i).endTimePosix);
-        
-            if successFlag == true
-                fileName = ['DGS_noise_', noiseLibrary(i).startTimeDatestrings, '.wav'];
-                fullNamePath = fullfile(noise_lib_path, fileName);
-                audiowrite(fullNamePath, audioData, Fs);
+        % Initialize futures array
+        futures = parallel.FevalFuture.empty(numFutures, 0);
+
+        % Initialize error logging
+        errorLog = cell(numFutures, 1);
+
+        % Submit parfeval requests
+        for i = 1:numFutures
+            wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);
+            futures(i) = parfeval(@processNoiseSequence, 2, i, wavs_filelist, ...
+                noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTimePosix, ...
+                noiseLibrary(i).endTimePosix, noiseLibrary(i).startTimeDatestrings, ...
+                noise_lib_path, Fs);
+        end
+
+        % Collect the results
+        for i = 1:numFutures
+            try
+                [completedIdx, successFlag, error_info] = fetchNext(futures);
+                
+                if ~isempty(error_info)
+                    errorLog{completedIdx} = error_info;
+                    fprintf('Warning: Error in sequence %d: %s\n', completedIdx, error_info.message);
+                end
+                
+                % Print progress
+                if mod(i, 100) == 0
+                    fprintf('Processed %d/%d noise sequences\n', i, numFutures);
+                end
+            catch ME
+                fprintf('Error fetching result for sequence %d: %s\n', i, ME.message);
+                errorLog{i} = struct('message', ME.message, 'stack', ME.stack);
             end
         end
+
         tocBytes(gcp)
         toc
+
+        % Print summary of errors
+        errorCount = sum(~cellfun(@isempty, errorLog));
+        fprintf('Total errors encountered: %d\n', errorCount);
+        
+        if errorCount > 0
+            fprintf('Error summary:\n');
+            for i = 1:length(errorLog)
+                if ~isempty(errorLog{i})
+                    fprintf('Sequence %d: %s\n', i, errorLog{i}.message);
+                end
+            end
+        end
+       
 end
 
 % Randomly select 10 rows from noiseLibrary and plot the spectrogram of the audioData
@@ -396,5 +399,35 @@ function filename = find_closest_wav(filelist, target_date_time)
             closest_posix = file_posix;
             filename = filelist(i).name;
         end
+    end
+end
+
+function [successFlag, error_info] = processNoiseSequence(i, wavs_filelist, ...
+    wavSubDirPath, startTimePosix, endTimePosix, startTimeDatestrings, ...
+    noise_lib_path, Fs)
+    
+    error_info = [];
+    
+    try
+        if isempty(wavs_filelist)
+            error('No wav files found - Check wav file paths and that storage volume is mounted.')
+        end
+        
+        % Retrieve audio file, trim/append to region of interest
+        [audioData, ~, retrievalSuccessFlag] = assembleROIAudio(...
+            wavs_filelist, wavSubDirPath, startTimePosix, endTimePosix);
+        
+        if retrievalSuccessFlag
+            fileName = ['DGS_noise_', startTimeDatestrings, '.wav'];
+            fullNamePath = fullfile(noise_lib_path, fileName);
+            audiowrite(fullNamePath, audioData, Fs);
+            successFlag = true;
+            fprintf('Wrote File %d to disk at %s.\n', i, fullNamePath)
+        else
+            error('Failed to retrieve audio data for noise sequence %d', i);
+        end
+    catch ME
+        successFlag = false;
+        error_info = struct('message', ME.message, 'stack', ME.stack);
     end
 end
