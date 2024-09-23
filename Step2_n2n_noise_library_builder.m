@@ -172,11 +172,18 @@ end
 
 switch mode
     case 'serial'
-
+        % Find the latest processed noise file
+        latestDateTime = findLatestNoiseFile(noise_lib_path);
+        
         % Start execution timing
         tic
         % Get then wavs and return the ROI
         for i = 1:nNoiseOnlySequences
+            % Skip already processed files
+            if ~isempty(latestDateTime) && datenum(noiseLibrary(i).startTimeDatestrings, 'yymmdd-HHMMSS') <= latestDateTime
+                continue;
+            end
+        
             wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);  % Use the cached list
             wav_filename = find_closest_wav(wavs_filelist, char(noiseLibrary(i).startTimeDatestrings));
         
@@ -197,20 +204,28 @@ switch mode
         % Stop execution timing
         toc
     case 'parallel'
+        % Find the latest processed noise file
+        latestDateTime = findLatestNoiseFile(noise_lib_path);
+        
         tic
         ticBytes(gcp);
-
+        
         % Number of noise sequences to process
         numFutures = nNoiseOnlySequences;
         
         % Initialize futures array
         futures = parallel.FevalFuture.empty(numFutures, 0);
-
+        
         % Initialize error logging
         errorLog = cell(numFutures, 1);
-
+        
         % Submit parfeval requests
         for i = 1:numFutures
+            % Skip already processed files
+            if ~isempty(latestDateTime) && datenum(noiseLibrary(i).startTimeDatestrings, 'yymmdd-HHMMSS') <= latestDateTime
+                continue;
+            end
+        
             wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);
             futures(i) = parfeval(@processNoiseSequence, 2, i, wavs_filelist, ...
                 noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTimePosix, ...
@@ -430,4 +445,28 @@ function [successFlag, error_info] = processNoiseSequence(i, wavs_filelist, ...
         successFlag = false;
         error_info = struct('message', ME.message, 'stack', ME.stack);
     end
+end
+
+function latestDateTime = findLatestNoiseFile(folderPath)
+    % Find the latest processed noise file based on the date-time in the filename
+    
+    % Get all WAV files in the folder
+    files = dir(fullfile(folderPath, 'DGS_noise_*.wav'));
+    
+    % If no files found, return empty
+    if isempty(files)
+        latestDateTime = [];
+        return;
+    end
+    
+    % Extract date-times from filenames
+    dateTimes = zeros(length(files), 1);
+    for i = 1:length(files)
+        % Extract the date-time after 'DGS_noise_'
+        parts = strsplit(files(i).name, '_');
+        dateTimes(i) = datenum(parts{3}(1:end-4), 'yyMMdd-HHmmSS');
+    end
+    
+    % The largest date-time is the latest processed file
+    latestDateTime = max(dateTimes);
 end
