@@ -15,7 +15,7 @@ clc
 
 % Begin logging
 ts = char(datetime("now", "Format", "dd-MMM-uuuu_HH-mm-ss"));
-logname = ['step1_script_log_', ts, '.txt'];
+logname = ['step2_script_log_', ts, '.txt'];
 diary(logname)
 
 %% Set Operating Environment
