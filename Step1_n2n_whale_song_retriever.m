@@ -1,4 +1,4 @@
-% Whale Song Retriever (Auto-restart version)
+% Whale Song Retriever (Auto-restart, parfeval version)
 % Step 1 of n2n train-test dataset builder
 %
 % Searches the detection results and retrieves the time-datestamps for all
@@ -16,6 +16,11 @@
 clear
 close all
 clc
+
+% Begin logging
+ts = char(datetime("now", "Format", "dd-MMM-uuuu_HH-mm-ss"));
+logname = ['step1_script_log_', ts, '.txt'];
+diary(logname)
 
 %% Set Operating Environment
 % 1 = Use the paths in config.m that relate to my windows laptop
@@ -36,7 +41,7 @@ disp('Loaded N2N Config file.')
 
 [gitRoot, ~, ~] = fileparts(here);
 utilPath = fullfile(gitRoot, 'Utilities');
-addpath = utilPath;
+addpath(utilPath);
 
 %% Load and process detections
 
@@ -265,6 +270,9 @@ else
     save(saveName, 'detectionsAll', '-v7.3');
     disp(['Created new metadata file: ' saveName]);
 end
+
+% End logging
+diary off
 
 %% Helper Functions
 

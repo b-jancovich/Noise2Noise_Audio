@@ -13,11 +13,31 @@ clear
 close all
 clc
 
+% Begin logging
+ts = char(datetime("now", "Format", "dd-MMM-uuuu_HH-mm-ss"));
+logname = ['step1_script_log_', ts, '.txt'];
+diary(logname)
+
+%% Set Operating Environment
+% 1 = Use the paths in config.m that relate to my windows laptop
+% 2 = Use the paths in config.m that relate to the Katana Cluster
+opEnv = 1;
+
+% Compute file retrievals in serial or parallel:
+mode = 'parallel';
+% Note: parallel requires MATLAB parallel computing toolbox
+
 %% Load project configuration file
 
 here = pwd;
 run(fullfile(here, 'config.m'));
 disp('Loaded N2N Config file.')
+
+%% Add Paths
+
+[gitRoot, ~, ~] = fileparts(here);
+utilPath = fullfile(gitRoot, 'Utilities');
+addpath(utilPath);
 
 %% Load detections, Clean Up and Build POSIX Dates
 
@@ -150,24 +170,86 @@ for i = 1:nNoiseOnlySequences
     end
 end
 
-% Get then wavs and return the ROI
-for i = 1:nNoiseOnlySequences
-    wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);  % Use the cached list
-    wav_filename = find_closest_wav(wavs_filelist, char(noiseLibrary(i).startTimeDatestrings));
+% Test size of 'wav_files_cache' which is a broadcast variable
+testmap_s = struct(wav_files_cache);
+disp('test bytes')
+whos testmap_s
 
-    if isempty(wavs_filelist)
-        error('No wav files found - Check wav file paths and that storage volume is mounted.')
-    end
+switch mode
+    case 'serial'
 
-    % Retrieve audio file, trim/append to region of interest, write to struct:
-    [audioData, ~, successFlag] = assembleROIAudio(...
-        wavs_filelist, noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTimePosix, noiseLibrary(i).endTimePosix);
+        % Start execution timing
+        tic
+        % Get then wavs and return the ROI
+        for i = 1:nNoiseOnlySequences
+            wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);  % Use the cached list
+            wav_filename = find_closest_wav(wavs_filelist, char(noiseLibrary(i).startTimeDatestrings));
+        
+            if isempty(wavs_filelist)
+                error('No wav files found - Check wav file paths and that storage volume is mounted.')
+            end
+        
+            % Retrieve audio file, trim/append to region of interest, write to struct:
+            [audioData, ~, successFlag] = assembleROIAudio(...
+                wavs_filelist, noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTimePosix, noiseLibrary(i).endTimePosix);
+        
+            if successFlag == true
+                fileName = ['DGS_noise_', noiseLibrary(i).startTimeDatestrings, '.wav'];
+                fullNamePath = fullfile(noise_lib_path, fileName);
+                audiowrite(fullNamePath, audioData, Fs);
+            end
+        end
+        % Stop execution timing
+        toc
+    case 'parallel'
 
-    if successFlag == true
-        fileName = ['DGS_noise_', noiseLibrary(i).startTimeDatestrings, '.wav'];
-        fullNamePath = fullfile(noise_lib_path, fileName);
-        audiowrite(fullNamePath, audioData, Fs);
-    end
+        % Cache directory listings outside the main audio retrieval loop
+
+        % Get unique wavSubDirPaths
+        unique_wavSubDirPaths = unique({noiseLibrary.wavSubDirPath}, 'stable');
+        numUniquePaths = length(unique_wavSubDirPaths);
+        wav_filelists = cell(numUniquePaths, 1);
+        
+        % Cache the dir() results
+        for k = 1:numUniquePaths
+            wav_filelists{k} = dir(fullfile(unique_wavSubDirPaths{k}, '*.wav'));
+        end
+        
+        % Map noiseLibrary(i).wavSubDirPath to index into unique_wavSubDirPaths
+        [~, idxInUnique] = ismember({noiseLibrary.wavSubDirPath}, unique_wavSubDirPaths);
+        
+        % Prepare per-sequence wav_filelists
+        nNoiseOnlySequences = length(noiseLibrary);
+        wav_filelists_per_sequence = cell(nNoiseOnlySequences, 1);
+        for i = 1:nNoiseOnlySequences
+            wav_filelists_per_sequence{i} = wav_filelists{idxInUnique(i)};
+        end
+        
+        % Now process in parallel
+        tic
+        ticbytes(gcp)
+        parfor i = 1:nNoiseOnlySequences
+            wavs_filelist = wav_filelists_per_sequence{i};
+        
+            if isempty(wavs_filelist)
+                error('No wav files found - Check wav file paths and that storage volume is mounted.')
+            end
+        
+            % Use the cached list
+            wav_filename = find_closest_wav(wavs_filelist, char(noiseLibrary(i).startTimeDatestrings));
+        
+            % Retrieve audio file, trim/append to region of interest, write to struct:
+            [audioData, ~, successFlag] = assembleROIAudio(...
+                wavs_filelist, noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTimePosix, noiseLibrary(i).endTimePosix);
+        
+            if successFlag == true
+                fileName = ['DGS_noise_', noiseLibrary(i).startTimeDatestrings, '.wav'];
+                fullNamePath = fullfile(noise_lib_path, fileName);
+                audiowrite(fullNamePath, audioData, Fs);
+            end
+        end
+        tocBytes(gcp)
+        toc
 end
 
 % Randomly select 10 rows from noiseLibrary and plot the spectrogram of the audioData
@@ -184,6 +266,8 @@ for i = 1:nToPlot
     sgtitle('Spectrograms of 10 Random Noise Samples')
 end
 
+% End logging
+diary off
 
 %% Helper Functions
 
