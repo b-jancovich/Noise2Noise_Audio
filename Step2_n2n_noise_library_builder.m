@@ -170,11 +170,6 @@ for i = 1:nNoiseOnlySequences
     end
 end
 
-% Test size of 'wav_files_cache' which is a broadcast variable
-testmap_s = struct(wav_files_cache);
-disp('test bytes')
-whos testmap_s
-
 switch mode
     case 'serial'
 
@@ -206,7 +201,13 @@ switch mode
         % Cache directory listings outside the main audio retrieval loop
 
         % Get unique wavSubDirPaths
-        unique_wavSubDirPaths = unique({noiseLibrary.wavSubDirPath}, 'stable');
+        % Extract the paths into an array of strings
+        cellArray = {noiseLibrary.wavSubDirPath};
+        % Concatenate into an array of strings
+        wavSubDirPaths = [cellArray{:}]; 
+        
+        % Get unique paths
+        unique_wavSubDirPaths = unique(wavSubDirPaths, 'stable');
         numUniquePaths = length(unique_wavSubDirPaths);
         wav_filelists = cell(numUniquePaths, 1);
         
@@ -216,8 +217,8 @@ switch mode
         end
         
         % Map noiseLibrary(i).wavSubDirPath to index into unique_wavSubDirPaths
-        [~, idxInUnique] = ismember({noiseLibrary.wavSubDirPath}, unique_wavSubDirPaths);
-        
+        [~, idxInUnique] = ismember(wavSubDirPaths, unique_wavSubDirPaths);
+
         % Prepare per-sequence wav_filelists
         nNoiseOnlySequences = length(noiseLibrary);
         wav_filelists_per_sequence = cell(nNoiseOnlySequences, 1);
