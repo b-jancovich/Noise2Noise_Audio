@@ -228,7 +228,7 @@ switch mode
         
         % Now process in parallel
         tic
-        ticbytes(gcp)
+        ticBytes(gcp)
         parfor i = 1:nNoiseOnlySequences
             wavs_filelist = wav_filelists_per_sequence{i};
         
