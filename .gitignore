@@ -3,3 +3,4 @@ Datasets/
 *__pycache__/
 *.asv
 *.mat
+*.txt
