@@ -1,14 +1,61 @@
-% Noise Library Builder
-% Step 2 of n2n train-test dataset builder 
+%% Step2_n2n_noise_library_builder.m - INTERRUPTABLE VERSION
 %
-% Extracts subsequences of audio that do not contain the signal of interest
-% Based on the original n2n_whale_song_dataset_builder_STEP1.m script
+% DESCRIPTION:
+%   This script is the second step in building a noise-to-noise (N2N) training
+%   dataset for audio processing. It extracts subsequences of audio that do
+%   not contain the signal of interest (whale songs) from continuous audio data.
+%   These "noise-only" segments are then saved as individual WAV files to create
+%   a noise library.
+%
+%   This script uses a checkpoint system, allowing it to be interrupted
+%   and resumed from the last completed step. The checkpoint file is
+%   automatically managed by the script. Simply run it again if interrupted.
+%   Script operations are logged in a text file that will be saved to the
+%   current MATLAB directory.
+%
+% KEY FEATURES:
+%   1. Loads and processes detection data from MAT files
+%   2. Identifies periods of time without whale songs based on detection data
+%   3. Extracts audio segments for noise-only periods
+%   4. Supports both serial and parallel processing modes
+%   5. Implements a checkpoint system for interruptible execution
+%   6. Handles audio segments that span multiple files
+%   7. Saves processed noise-only audio segments
+%   8. Generates spectrograms for random samples of the noise library
+%
+% DEPENDENCIES:
+%   - MATLAB Parallel Computing Toolbox (for parallel processing mode)
+%   - Custom functions: assembleROIAudio, find_closest_wav, convert_to_posix
+%
+% SCRIPT WORKFLOW:
+%   1. Initialization and Configuration
+%      - Loads project configuration from config.m
+%      - Sets up logging and determines operating environment
+%
+%   2. Detection Data Processing
+%      - Loads detection data from MAT files
+%      - Filters detections based on time separation and signal quality
+%      - Identifies periods of time without whale songs
+%
+%   3. Noise Audio Segment Retrieval and Processing
+%      - Retrieves audio segments for each identified noise-only period
+%      - Handles audio segments that span multiple files
+%
+%   4. Noise Library Creation
+%      - Saves processed noise-only audio segments as individual WAV files
+%      - Generates spectrograms for a random sample of noise segments
+%
+% USAGE:
+%   1. Ensure all dependencies are installed and custom functions are in the MATLAB path
+%   2. Set appropriate parameters in config.m
+%   3. Run the script
 %
 % Ben Jancovich, 2024
 % Centre for Marine Science and Innovation
 % School of Biological, Earth and Environmental Sciences
 % University of New South Wales, Sydney, Australia
-
+%
+%%
 clear
 close all
 clc

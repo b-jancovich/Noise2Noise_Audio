@@ -1,10 +1,58 @@
-% n2n_trainset_builder_STEP3.m - INTERRUPTABLE VERSION
-
-% Ben Jancovich, 2024
-% Centre for Marine Science and Innovation
-% School of Biological, Earth and Environmental Sciences
-% University of New South Wales, Sydney, Australia
+%% n2n_trainset_builder_STEP3.m - INTERRUPTABLE VERSION
 %
+% DESCRIPTION:
+%   This script is part of a larger project for building a training dataset
+%   for a noise2noise (N2N) audio denoiser for whale songs. It processes 
+%   audio files, identifies dissimilar pairs, and prepares them for use in 
+%   training the noise2noise learning model. 
+% 
+%   This script uses a checkpoint system, allowing it to be interrupted 
+%   and resumed from the last completed step. The checkpoint file is 
+%   automatically managed by the script. Simply run it again if interrupted. 
+%   Script operations are logged in a text file that will be saved to the 
+%   current MATLAB directory.
+%
+% DEPENDENCIES:
+%   - MATLAB Parallel Computing Toolbox (optional, for parallel processing)
+%   - Custom functions: selectAudioFeatures, LDHPairs_v2, signalSimilarity, batchAudioDatastore
+%
+% SCRIPT WORKFLOW:
+%   1. Initialization and Configuration
+%      - Clears workspace and loads project configuration from config.m
+%      - Sets up logging and checkpoint system
+%
+%   2. Audio Datastore Creation
+%      - Creates an AudioDatastore from specified path
+%      - Applies minimum SNR filtering
+%
+%   3. Feature Selection
+%      - Selects most salient audio features for similarity analysis
+%
+%   4. Local Dissimilarity Hashing (LDH)
+%      - Identifies dissimilar audio pairs using LDH algorithm
+%
+%   5. Similarity Testing and Sorting
+%      - Calculates similarity between audio pairs
+%      - Sorts pairs based on similarity
+%
+%   6. Visualization
+%      - Creates spectrograms of most and least similar audio pairs
+%
+%   7. Training Dataset Preparation
+%      - Copies selected audio files to training input and target directories
+%      - Saves metadata about signal pairs
+%
+% USAGE:
+%   1. Ensure all dependencies are installed and custom functions are in the MATLAB path
+%   2. Set appropriate parameters in config.m
+%   3. Run the script
+%
+%   Ben Jancovich, 2024
+%   Centre for Marine Science and Innovation
+%   School of Biological, Earth and Environmental Sciences
+%   University of New South Wales, Sydney, Australia
+%
+%%
 clear
 close all
 clc
@@ -44,13 +92,15 @@ end
 
 %% Build the datastore
 
-% % Debug test inputs
-% isolated_detections_wav_path = 'D:\LSH_TEST';
-% miniBatchSize = 100;
-% sampleSize = 200;
-% nTrainingPairs = 300;
+% % % Input variable injection (for debug purposes only)
+% % isolated_detections_wav_path = 'D:\LSH_TEST';
+% % miniBatchSize = 100;
+% % sampleSize = 200;
+% % nTrainingPairs = 300;
 
 if currentStep <= 1
+    tic
+
     % Create AudioDatastore
     ads = batchAudioDatastore(isolated_detections_wav_path, ...
         'FileExtensions', '.wav', ...
@@ -64,11 +114,16 @@ if currentStep <= 1
     % Save checkpoint
     currentStep = 2;
     save(checkpointFile, 'currentStep', 'ads');
+
+    % Report compute time
+    elapsed_time = datetime(toc, 'ConvertFrom', 'posixtime', 'Format', 'HH:mm:ss.SSS');    
+    fprintf('Datastore Construction took %s (HH:mm:ss.sss).\n', elapsed_time)
 end
 
 %% Test Which Features To Use for (Dis)similarity Hashing
 
 if currentStep <= 2
+    tic
     fprintf('Running automated feature selection on %d signals...\n', sampleSize);
 
     % Compute window size
@@ -86,36 +141,38 @@ if currentStep <= 2
     % Save checkpoint
     currentStep = 3;
     save(checkpointFile, 'currentStep', 'ads', 'features', 'featuresToUse');
+
+    % Report compute time
+    elapsed_time = datetime(toc, 'ConvertFrom', 'posixtime', 'Format', 'HH:mm:ss.SSS');    
+    fprintf('Feature Selection took %s (HH:mm:ss.sss).\n', elapsed_time)
 end
+
 
 %% Local (Dis)Similarity Hashing
 
 if currentStep <= 3
+    tic
     disp('Beginning Local Dissimilarity Hashing...')
-
-    profile on
 
     % Run LDH Matching using selected features
     reset(ads)
     dissimilarPairs = LDHPairs_v2(ads, soiHiFreq, stationarityThreshold, ...
         overlapPercent, nFFT, fadeLen, featuresToUse, hashTables, bandSize);
-
-    profile off
-
-    % Get the profile information
-    p = profile('info');
-
-    % Generate a report and save it as PDF
-    profsave(p, fullfile(pwd, 'LDHPairs_profile_report_ismember_simple'));
     
     % Save checkpoint
     currentStep = 4;
     save(checkpointFile, 'currentStep', 'ads', 'features', 'featuresToUse', 'dissimilarPairs');
+
+    % Report compute time
+    elapsed_time = datetime(toc, 'ConvertFrom', 'posixtime', 'Format', 'HH:mm:ss.SSS');    
+    fprintf('Local Dissimilarity Hashing (LDHPairs Function) took %s (HH:mm:ss.sss).\n', elapsed_time)
 end
 
 %% Test & Sort Pairs by Similarity (Max of 2D Cross Correlation)
 
 if currentStep <= 4
+    tic
+
     nPairs = length(dissimilarPairs);
     similarity = zeros(nPairs, 1);
     rawMetrics = zeros(nPairs, 4);
@@ -167,6 +224,10 @@ if currentStep <= 4
     % Save checkpoint
     currentStep = 5;
     save(checkpointFile, 'currentStep', 'ads', 'features', 'featuresToUse', 'dissimilarPairs', 'signalPairs');
+
+    % Report compute time
+    elapsed_time = datetime(toc, 'ConvertFrom', 'posixtime', 'Format', 'HH:mm:ss.SSS');    
+    fprintf('Similarity sorting took %s (HH:mm:ss.sss).\n', elapsed_time)
 end
 
 %% Validation figure

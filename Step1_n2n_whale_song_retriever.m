@@ -1,12 +1,52 @@
-% Whale Song Retriever (Auto-restart, parfeval version)
-% Step 1 of n2n train-test dataset builder
+%% Step1_n2n_whale_song_retriever.m - INTERRUPTABLE VERSION
 %
-% Searches the detection results and retrieves the time-datestamps for all
-% detections that are separated by >= "minutesSeparation", then retrieves
-% the corresponding wav files from the continuous audio data and trims each
-% one to the detection. Resulting detections are saved out as wav files. If
-% a detection runs over the end of a wav file into the next one, files are
-% checked for continuity, then concatenated.
+% DESCRIPTION:
+%   This script is the first step in building a noise-to-noise (N2N) training
+%   dataset for audio processing. It retrieves whale song detections from
+%   continuous audio data, trims them to the region of interest, and saves
+%   them as individual WAV files.
+% 
+%   This script uses a checkpoint system, allowing it to be interrupted 
+%   and resumed from the last completed step. The checkpoint file is 
+%   automatically managed by the script. Simply run it again if interrupted. 
+%   Script operations are logged in a text file that will be saved to the 
+%   current MATLAB directory.
+%
+% KEY FEATURES:
+%   1. Loads and processes detection data from MAT files
+%   2. Filters detections based on time separation and signal quality
+%   3. Retrieves audio segments for each valid detection
+%   4. Supports both serial and parallel processing modes
+%   5. Implements a checkpoint system for interruptible execution
+%   6. Handles audio segments that span multiple files
+%   7. Saves processed audio segments and metadata
+%
+% DEPENDENCIES:
+%   - MATLAB Parallel Computing Toolbox (for parallel processing mode)
+%   - Custom functions: findROI_wavWriter, find_closest_wav, convert_to_posix
+%
+% SCRIPT WORKFLOW:
+%   1. Initialization and Configuration
+%      - Loads project configuration from config.m
+%      - Sets up logging and determines operating environment
+%
+%   2. Detection Data Processing
+%      - Loads detection data from MAT files
+%      - Filters and sorts detections based on time and signal quality
+%
+%   3. Audio Segment Retrieval and Processing
+%      - Retrieves audio segments for each valid detection
+%      - Trims audio to the region of interest
+%      - Handles detections that span multiple audio files
+%
+%   4. Audio Saving and Metadata Generation
+%      - Saves processed audio segments as individual WAV files
+%      - Generates and saves metadata for the processed detections
+%
+% USAGE:
+%   1. Ensure all dependencies are installed and custom functions are in the MATLAB path
+%   2. Set appropriate parameters in config.m
+%   3. Run the script
 %
 % Ben Jancovich, 2024
 % Centre for Marine Science and Innovation

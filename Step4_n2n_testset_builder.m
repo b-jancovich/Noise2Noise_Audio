@@ -1,10 +1,60 @@
-% n2n_testset_builder_STEP4.m
-
+%% Step4_n2n_testset_builder.m - INTERRUPTABLE VERSION
+%
+% DESCRIPTION:
+%   This script is the fourth step in building a noise-to-noise (N2N) training
+%   dataset for audio processing. It generates a test dataset by augmenting
+%   a clean whale song detection and mixing it with noise samples from the
+%   noise library. The resulting dataset includes both clean (ground truth)
+%   and corrupted (input) audio files for testing the N2N model.
+%
+%   This script uses a checkpoint system, allowing it to be interrupted
+%   and resumed from the last completed step. The checkpoint file is
+%   automatically managed by the script. Simply run it again if interrupted.
+%   Script operations are logged in a text file that will be saved to the
+%   current MATLAB directory.
+%
+% KEY FEATURES:
+%   1. Loads a clean whale song detection and noise samples
+%   2. Applies various audio augmentations to the clean signal
+%   3. Mixes augmented clean signals with noise at specified SNR levels
+%   4. Generates both clean (ground truth) and corrupted (input) test files
+%   5. Supports interruptible execution through checkpointing
+%   6. Implements realistic signal degradation over time
+%   7. Applies Doppler shift to simulate moving sound sources
+%
+% DEPENDENCIES:
+%   - MATLAB Audio Toolbox
+%   - MATLAB Signal Processing Toolbox
+%   - Custom functions: sigNoiseMixer, dopplerShift
+%
+% SCRIPT WORKFLOW:
+%   1. Initialization and Configuration
+%      - Loads project configuration from config.m
+%      - Sets up the audio datastore for the training set
+%
+%   2. Test Dataset Preparation
+%      - Loads and preprocesses the clean whale song detection
+%      - Prepares the noise library and augmentation parameters
+%
+%   3. Signal Augmentation
+%      - Builds a data augmentation object with various transformations
+%      - Applies augmentations to the clean signal
+%
+%   4. Test Dataset Generation
+%      - Mixes augmented clean signals with noise at specified SNR levels
+%      - Saves clean (ground truth) and corrupted (input) audio files
+%
+% USAGE:
+%   1. Ensure all dependencies are installed and custom functions are in the MATLAB path
+%   2. Set appropriate parameters in config.m
+%   3. Run the script
+%
 % Ben Jancovich, 2024
 % Centre for Marine Science and Innovation
 % School of Biological, Earth and Environmental Sciences
 % University of New South Wales, Sydney, Australia
 %
+%%
 clear
 close all
 clc
