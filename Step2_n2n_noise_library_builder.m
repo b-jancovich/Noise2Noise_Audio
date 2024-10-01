@@ -25,7 +25,7 @@
 %
 % DEPENDENCIES:
 %   - MATLAB Parallel Computing Toolbox (for parallel processing mode)
-%   - Custom functions: assembleROIAudio, find_closest_wav, convert_to_posix
+%   - Custom functions: assembleROIAudio, find_closest_wav
 %
 % SCRIPT WORKFLOW:
 %   1. Initialization and Configuration
@@ -71,7 +71,7 @@ diary(logname)
 opEnv = 1;
 
 % Compute file retrievals in serial or parallel:
-mode = 'parallel';
+mode = 'parallel'; % or 'serial'
 % Note: parallel requires MATLAB parallel computing toolbox
 
 %% Load project configuration file
@@ -86,7 +86,7 @@ disp('Loaded N2N Config file.')
 utilPath = fullfile(gitRoot, 'Utilities');
 addpath(utilPath);
 
-%% Load detections, Clean Up and Build POSIX Dates
+%% Load detections, Clean Up and Build serial_datenum Dates
 
 detectionsFiles = dir(fullfile(detectionsPath, '*.mat'));
 
@@ -103,7 +103,7 @@ tempTables = cell(length(detectionsFiles), 1);
 for i = 1:length(detectionsFiles)
     data = load(fullfile(detectionsPath, detectionsFiles(i).name), 'detections');
     tempTables{i} = array2table(data.detections, 'VariableNames', ...
-        {'Year', 'JulianDay', 'Month', 'Week', 'Time', 'SNR', 'SINR', 'SNRClass'});
+        {'Year', 'JulianDay', 'Month', 'Week', 'serial_datenum', 'SNR', 'SINR', 'SNRClass'});
     disp(['Loaded Detections File: ', detectionsFiles(i).name])
 end
 
@@ -117,26 +117,28 @@ detectionsAll = detectionsAll(validDetection, :);
 
 % DetectionsAll field "Time" is in MATLAB's serial "datenum" format 
 % (fractional days since January 01, 0000)
-% Convert serial time to Posix Time and sort detections
-detectionsAll.datetime_Readable = datetime(detectionsAll.Time, 'ConvertFrom', 'datenum');
-detectionsAll.posix_time = (detectionsAll.Time - datenum('1970-01-01')) * 86400;
+% Convert serial time to serial_datenum Time and sort detections
+detectionsAll.datetime_Readable = datetime(detectionsAll.serial_datenum, 'ConvertFrom', 'datenum');
 
 %% Filter list of detections by defining a minimim time separtation
 
 % Calculate the minimum separation between detection timestamps to qualify
-% a period of time as "song-free". Posix time is in seconds.
-maxSongLength = (call_duration * safetyFactor) + (buffer_duration * safetyFactor);
-minimumSongSeparationPosix = maxSongLength + interCallInterval * safetyFactor; 
-minimumSongSeparationSamps = minimumSongSeparationPosix * Fs; 
+% a period of time as "song-free".
+maxSongLengthSeconds = (call_duration * safetyFactor) + (buffer_duration * safetyFactor);
+maxSongLengthDays = maxSongLengthSeconds / 86400;
+minimumSongSeparationSeconds = maxSongLengthSeconds + interCallInterval * safetyFactor;
+minimumSongSeparationDays = minimumSongSeparationSeconds / 86400;
+minimumSongSeparationSamps = minimumSongSeparationSeconds * Fs; 
 
-% Sort detectionsAll by posix_time
-detectionsAll = sortrows(detectionsAll, 'posix_time');
+% Sort detectionsAll by serial_datenum
+detectionsAll = sortrows(detectionsAll, 'serial_datenum');
 
-% Calculate time differences between consecutive rows
-timeDiffs = diff(detectionsAll.posix_time);
+% Calculate time differences between consecutive rows (in seconds)
+timeDiffsSeconds = diff(detectionsAll.serial_datenum) * 86400;
 
-% Find indices where the time difference is greater than or equal to minimumSongSeparationPosix
-validIndices = find(timeDiffs >= minimumSongSeparationPosix);
+% Find indices where the time difference is greater than or equal to
+% minimumSongSeparationSeonds
+validIndices = find(timeDiffsSeconds >= minimumSongSeparationSeconds);
 
 % Create a logical array for filtering
 filterMask = false(height(detectionsAll), 1);
@@ -155,34 +157,35 @@ clearvars detectionsAll detectionsFiles data tempTables
 
 %% Get time indices of song-free periods
 
-noiseLibrary = struct("Year", [], "startTimePosix", [], "endTimePosix", [], ...
+noiseLibrary = struct("Year", [], "startTime_serial_datenum", [], "endTime_serial_datenum", [], ...
     "separation2Next_Minutes", []);
 nNoiseOnlySequences = height(filteredDetections);
 nIdx = 1;
 for i = 1:nNoiseOnlySequences-1
         % Get current and next detections's start and end times
-        currentDetectionStart = filteredDetections{i,"posix_time"};
-        currentDetectionEnd = currentDetectionStart + maxSongLength;
-        nextDetectionStart = filteredDetections{i+1,"posix_time"} - maxSongLength;
+        currentDetectionStart = filteredDetections{i,"serial_datenum"};
+        currentDetectionEnd = currentDetectionStart + maxSongLengthDays;
+        nextDetectionStart = filteredDetections{i+1,"serial_datenum"} - maxSongLengthDays;
 
-        % Calculate seconds between end of this detection and start of next detection:
-        currentToNextSeparationPosix = nextDetectionStart - currentDetectionEnd;
+        % Calculate duration between end of this detection and start of
+        % next detection (days):
+        currentToNextSeparation_days = nextDetectionStart - currentDetectionEnd;
 
         % If separation between detections is big enough, record this 
         % time period in the library as a noise sample:
-        if currentToNextSeparationPosix > minimumSongSeparationPosix
+        if currentToNextSeparation_days > minimumSongSeparationDays
 
             % Record the year of the noise sample
             noiseLibrary(nIdx).Year = filteredDetections{i, "Year"};
 
             % Record the start timestamp of noise-only period
-            noiseLibrary(nIdx).startTimePosix = currentDetectionEnd;
+            noiseLibrary(nIdx).startTime_serial_datenum = currentDetectionEnd;
 
             % Record the time separation
-            noiseLibrary(nIdx).separation2Next_Minutes = currentToNextSeparationPosix/60;
+            noiseLibrary(nIdx).separation2Next_Minutes = currentToNextSeparation_days/60;
 
             % Record the End timestamp of noise-only period
-            noiseLibrary(nIdx).endTimePosix = nextDetectionStart;
+            noiseLibrary(nIdx).endTime_serial_datenum = nextDetectionStart;
 
             % Increment counter
             nIdx = nIdx + 1;
@@ -200,12 +203,9 @@ nNoiseOnlySequences = length(noiseLibrary);
 for i = 1:nNoiseOnlySequences
     % Get wav subdirectory paths
     noiseLibrary(i).wavSubDirPath = fullfile(rawAudioPath, [wav_subdir_prefix, num2str(noiseLibrary(i).Year)], 'wav/');
-        
-    % Convert start time of song-free period from POSIX time to MATLAB datenum
-    datenum_time = noiseLibrary(i).startTimePosix / 86400 + datenum('1970-01-01');
     
     % Format the datenum as a string
-    noiseLibrary(i).startTimeDatestrings = datestr(datenum_time, wav_dateformat_serial);
+    noiseLibrary(i).startTimeDatestrings = datestr(noiseLibrary(i).startTime_serial_datenum, wav_dateformat_serial);
 end
 
 % Cache directory listings outside the main audio retrieval loop
@@ -220,14 +220,14 @@ end
 switch mode
     case 'serial'
         % Find the latest processed noise file
-        latestDateTime = findLatestNoiseFile(noise_lib_path);
+        latestdatenum = findLatestNoiseFile(noise_lib_path);
         
         % Start execution timing
         tic
         % Get then wavs and return the ROI
         for i = 1:nNoiseOnlySequences
             % Skip already processed files
-            if ~isempty(latestDateTime) && datenum(noiseLibrary(i).startTimeDatestrings, 'yymmdd-HHMMSS') <= latestDateTime
+            if ~isempty(latestdatenum) && datenum(noiseLibrary(i).startTimeDatestrings, 'yymmdd-HHMMSS') <= latestdatenum
                 continue;
             end
         
@@ -240,7 +240,7 @@ switch mode
         
             % Retrieve audio file, trim/append to region of interest, write to struct:
             [audioData, ~, successFlag] = assembleROIAudio(...
-                wavs_filelist, noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTimePosix, noiseLibrary(i).endTimePosix);
+                wavs_filelist, noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTime_serial_datenum, noiseLibrary(i).endTime_serial_datenum);
         
             if successFlag == true
                 fileName = ['DGS_noise_', noiseLibrary(i).startTimeDatestrings, '.wav'];
@@ -252,7 +252,7 @@ switch mode
         toc
     case 'parallel'
         % Find the latest processed noise file
-        latestDateTime = findLatestNoiseFile(noise_lib_path);
+        latestdatenum = findLatestNoiseFile(noise_lib_path);
         
         tic
         ticBytes(gcp);
@@ -269,14 +269,14 @@ switch mode
         % Submit parfeval requests
         for i = 1:numFutures
             % Skip already processed files
-            if ~isempty(latestDateTime) && datenum(noiseLibrary(i).startTimeDatestrings, 'yymmdd-HHMMSS') <= latestDateTime
+            if ~isempty(latestdatenum) && datenum(noiseLibrary(i).startTimeDatestrings, 'yymmdd-HHMMSS') <= latestdatenum
                 continue;
             end
         
             wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);
             futures(i) = parfeval(@processNoiseSequence, 2, i, wavs_filelist, ...
-                noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTimePosix, ...
-                noiseLibrary(i).endTimePosix, noiseLibrary(i).startTimeDatestrings, ...
+                noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTime_serial_datenum, ...
+                noiseLibrary(i).endTime_serial_datenum, noiseLibrary(i).startTimeDatestrings, ...
                 noise_lib_path, Fs);
         end
 
@@ -337,14 +337,15 @@ diary off
 
 %% Helper Functions
 
-function [audioData, Fs, successFlag] = assembleROIAudio(wavs_filelist, read_folder, ROI_start_posix, ROI_end_posix)
+function [audioData, Fs, successFlag] = assembleROIAudio(wavs_filelist, read_folder, ROI_start_serial_datenum, ROI_end_serial_datenum)
 % Assembles audio data for a given region of interest (ROI) from multiple WAV files
-%
+% NOTE: IT IS ASSUMED ALL FILES ARE THE SAME BIT DEPTH & SAMPLE RATE
+
 % Inputs:
 %   wavs_filelist: struct array containing information about WAV files
 %   read_folder: string, path to the folder containing WAV files
-%   ROI_start_posix: double, start time of ROI in POSIX format
-%   ROI_end_posix: double, end time of ROI in POSIX format
+%   ROI_start_serial_datenum: double, start time of ROI in serial_datenum format
+%   ROI_end_serial_datenum: double, end time of ROI in serial_datenum format
 %
 % Outputs:
 %   audioData: vector of doubles, assembled audio data for the ROI
@@ -354,23 +355,48 @@ function [audioData, Fs, successFlag] = assembleROIAudio(wavs_filelist, read_fol
 % Initialize variables
 successFlag = true;
 audioData = [];
-Fs = NaN;
-wav_dateformat_datetime = 'yyMMdd-HHmmss';
+wav_datestring_format = 'yyMMdd-HHmmss';
 max_attempts = 2;
 retry_delay = 2; % seconds
 
-% Convert POSIX times to datetime
-ROI_start_datetime = datetime(ROI_start_posix, 'ConvertFrom', 'posixtime');
-ROI_end_datetime = datetime(ROI_end_posix, 'ConvertFrom', 'posixtime');
+% Convert datenum times to datenum
+ROI_start_datetime = datetime(ROI_start_serial_datenum, 'ConvertFrom', 'datenum');
+ROI_end_datetime = datetime(ROI_end_serial_datenum, 'ConvertFrom', 'datenum');
+
+% Select the first file to get attributes
+testAttributesFile = fullfile(wavs_filelist(1).folder, wavs_filelist(1).name);
+% Read audio sample rate
+[~, Fs] = audioread(testAttributesFile);
+% Read wav file header
+fid = fopen(testAttributesFile, 'r');
+% Seek to the position where bit depth is stored (position 35-36)
+fseek(fid, 34, 'bof');
+% Read 2 bytes for bit depth
+bit_depth = fread(fid, 1, 'uint16');
+% Close the file
+fclose(fid);
 
 % Find relevant WAV files
 relevant_files = [];
 for i = 1:length(wavs_filelist)
+    % Get file start time:
     file_start_str = extractAfter(wavs_filelist(i).name, "H08S1_");
-    file_start_datetime = datetime(file_start_str(1:end-4), 'InputFormat', wav_dateformat_datetime);
-    file_duration = seconds(wavs_filelist(i).bytes / (2 * 100)); % Assuming 16-bit samples at 100 Hz
-    file_end_datetime = file_start_datetime + file_duration;
+    file_start_datetime = datetime(file_start_str(1:end-4), 'InputFormat', wav_datestring_format);
+
+    % Calculate the number of bytes per sample
+    bytes_per_sample = bit_depth / 8;
     
+    % Calculate the number of samples (subtract 44 bytes for WAV header)
+    num_samples = (wavs_filelist(i).bytes - 44) / bytes_per_sample;
+    
+    % Calculate the file duration in seconds
+    file_duration = num_samples / Fs;
+
+    % Calculate file end time
+    file_end_datetime = file_start_datetime + seconds(file_duration);
+    
+    % If the file start and end are within the ROI start and end, mark as
+    % relevant:
     if (file_start_datetime <= ROI_end_datetime && file_end_datetime >= ROI_start_datetime)
         relevant_files = [relevant_files; wavs_filelist(i)];
     end
@@ -404,7 +430,7 @@ for i = 1:length(relevant_files)
     
     % Determine start and end samples for this file
     file_start_str = extractAfter(relevant_files(i).name, "H08S1_");
-    file_start_datetime = datetime(file_start_str(1:end-4), 'InputFormat', wav_dateformat_datetime);
+    file_start_datetime = datetime(file_start_str(1:end-4), 'InputFormat', wav_datestring_format);
     file_duration = seconds(length(audio) / Fs);
     file_end_datetime = file_start_datetime + file_duration;
     
@@ -430,42 +456,8 @@ audioData = audioData - mean(audioData);
 
 end
 
-function filename = find_closest_wav(filelist, target_date_time)
-    % Convert the target date-time stamp to posixtime
-    target_posix = convert_to_posix(target_date_time);
-    
-    % Initialize the closest posixtime and filename
-    closest_posix = -inf;  % Changed from inf to -inf
-    filename = '';
-    
-    % Iterate over the files
-    for i = 1:length(filelist)
-        % Extract the date-time stamp from the file name
-        file_datetime_str = regexp(filelist(i).name, '\d+', 'match');
-        
-        % If there's no date-time stamp, skip this file
-        if isempty(file_datetime_str)
-            continue;
-        end
-        
-        % Convert the date-time stamp to posixtime
-        file_posix = convert_to_posix([file_datetime_str{1,3}, '-', file_datetime_str{1,4}]);
-        
-        % If the file's datetime is after the target, skip this file
-        if file_posix > target_posix
-            continue;
-        end
-        
-        % If the file's datetime is closer to the target than the current closest, update the closest
-        if file_posix > closest_posix  % Changed comparison logic
-            closest_posix = file_posix;
-            filename = filelist(i).name;
-        end
-    end
-end
-
 function [successFlag, error_info] = processNoiseSequence(i, wavs_filelist, ...
-    wavSubDirPath, startTimePosix, endTimePosix, startTimeDatestrings, ...
+    wavSubDirPath, startTime_serial_datenum, endTime_serial_datenum, startTimeDatestrings, ...
     noise_lib_path, Fs)
     
     error_info = [];
@@ -477,7 +469,7 @@ function [successFlag, error_info] = processNoiseSequence(i, wavs_filelist, ...
         
         % Retrieve audio file, trim/append to region of interest
         [audioData, ~, retrievalSuccessFlag] = assembleROIAudio(...
-            wavs_filelist, wavSubDirPath, startTimePosix, endTimePosix);
+            wavs_filelist, wavSubDirPath, startTime_serial_datenum, endTime_serial_datenum);
         
         if retrievalSuccessFlag
             fileName = ['DGS_noise_', startTimeDatestrings, '.wav'];
