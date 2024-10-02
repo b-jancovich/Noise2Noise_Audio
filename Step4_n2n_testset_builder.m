@@ -25,7 +25,7 @@
 % DEPENDENCIES:
 %   - MATLAB Audio Toolbox
 %   - MATLAB Signal Processing Toolbox
-%   - Custom functions: sigNoiseMixer, dopplerShift
+%   - Custom functions: sigNoiseMixer, dopplerShift, Utilities repo
 %
 % SCRIPT WORKFLOW:
 %   1. Initialization and Configuration
@@ -59,11 +59,20 @@ clear
 close all
 clc
 
+%% Set environment
+opEnv = 1;
+% 1 = Use the paths in config.m that relate to my windows laptop
+% 2 = Use the paths in config.m that relate to the Katana Cluster
+
 %% Load project configuration file
 
 here = pwd;
 run(fullfile(here, 'config.m'));
 disp('Loaded N2N Config file.')
+
+%% Add utilities repo to path
+[gitRootPath, ~, ~] = fileparts(here);
+addpath(fullfile(gitRootPath, 'Utilities'));
 
 %% Build the Training set datastore to get matching signal lengths & Fs
 
@@ -251,43 +260,4 @@ end
 
 %% Helper Functions:
 
-function y = dopplerShift(x, fs, v, c)
-    % Apply Doppler shift to audio signal
-    %
-    % Inputs:
-    % x: input audio signal
-    % fs: sampling frequency of x (Hz)
-    % v: velocity of source (m/s), positive if moving towards receiver
-    % c: speed of sound (m/s)
-    %
-    % Output:
-    % y: Doppler-shifted audio signal
-    
-    % Calculate the Doppler shift factor
-    alpha = c / (c - v);
-    
-    % Create time vectors
-    t_original = (0:length(x)-1) / fs;
-    t_shifted = t_original / alpha;
-    
-    % Interpolate the signal
-    y = interp1(t_original, x, t_shifted, 'linear', 0);
-    
-    % Adjust the amplitude to conserve energy
-    y = y * sqrt(alpha);
-    
-    % Ensure the output matches the dimension of the input
-    if length(y) > length(x)
-        y = y(1:length(x));
-    elseif length(y) < length(x)
-        y(end+1:length(x)) = 0;
-    end
-    
-    % Ensure the output has the same orientation as the input
-    if iscolumn(x)
-        y = y(:);
-    elseif isrow(x)
-        y = y(:)';
-    end
-
-end
+% Doppler shift moved to Utilities.
