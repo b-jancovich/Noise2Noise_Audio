@@ -115,7 +115,7 @@ validDetection = ~(isnan(detectionsAll.SNR) | isnan(detectionsAll.SINR) | ...
     isinf(detectionsAll.SNR) | isinf(detectionsAll.SINR));
 detectionsAll = detectionsAll(validDetection, :);
 
-% DetectionsAll field "Time" is in MATLAB's serial "datenum" format 
+% DetectionsAll field "Time" is in MATLAB's serial "datenum" format
 % (fractional days since January 01, 0000)
 % Convert serial time to serial_datenum Time and sort detections
 detectionsAll.datetime_Readable = datetime(detectionsAll.serial_datenum, 'ConvertFrom', 'datenum');
@@ -128,7 +128,7 @@ maxSongLengthSeconds = (call_duration * safetyFactor) + (buffer_duration * safet
 maxSongLengthDays = maxSongLengthSeconds / 86400;
 minimumSongSeparationSeconds = maxSongLengthSeconds + interCallInterval * safetyFactor;
 minimumSongSeparationDays = minimumSongSeparationSeconds / 86400;
-minimumSongSeparationSamps = minimumSongSeparationSeconds * Fs; 
+minimumSongSeparationSamps = minimumSongSeparationSeconds * Fs;
 
 % Sort detectionsAll by serial_datenum
 detectionsAll = sortrows(detectionsAll, 'serial_datenum');
@@ -162,34 +162,34 @@ noiseLibrary = struct("Year", [], "startTime_serial_datenum", [], "endTime_seria
 nNoiseOnlySequences = height(filteredDetections);
 nIdx = 1;
 for i = 1:nNoiseOnlySequences-1
-        % Get current and next detections's start and end times
-        currentDetectionStart = filteredDetections{i,"serial_datenum"};
-        currentDetectionEnd = currentDetectionStart + maxSongLengthDays;
-        nextDetectionStart = filteredDetections{i+1,"serial_datenum"} - maxSongLengthDays;
+    % Get current and next detections's start and end times
+    currentDetectionStart = filteredDetections{i,"serial_datenum"};
+    currentDetectionEnd = currentDetectionStart + maxSongLengthDays;
+    nextDetectionStart = filteredDetections{i+1,"serial_datenum"} - maxSongLengthDays;
 
-        % Calculate duration between end of this detection and start of
-        % next detection (days):
-        currentToNextSeparation_days = nextDetectionStart - currentDetectionEnd;
+    % Calculate duration between end of this detection and start of
+    % next detection (days):
+    currentToNextSeparation_days = nextDetectionStart - currentDetectionEnd;
 
-        % If separation between detections is big enough, record this 
-        % time period in the library as a noise sample:
-        if currentToNextSeparation_days > minimumSongSeparationDays
+    % If separation between detections is big enough, record this
+    % time period in the library as a noise sample:
+    if currentToNextSeparation_days > minimumSongSeparationDays
 
-            % Record the year of the noise sample
-            noiseLibrary(nIdx).Year = filteredDetections{i, "Year"};
+        % Record the year of the noise sample
+        noiseLibrary(nIdx).Year = filteredDetections{i, "Year"};
 
-            % Record the start timestamp of noise-only period
-            noiseLibrary(nIdx).startTime_serial_datenum = currentDetectionEnd;
+        % Record the start timestamp of noise-only period
+        noiseLibrary(nIdx).startTime_serial_datenum = currentDetectionEnd;
 
-            % Record the time separation
-            noiseLibrary(nIdx).separation2Next_Minutes = currentToNextSeparation_days/60;
+        % Record the time separation
+        noiseLibrary(nIdx).separation2Next_Minutes = currentToNextSeparation_days/60;
 
-            % Record the End timestamp of noise-only period
-            noiseLibrary(nIdx).endTime_serial_datenum = nextDetectionStart;
+        % Record the End timestamp of noise-only period
+        noiseLibrary(nIdx).endTime_serial_datenum = nextDetectionStart;
 
-            % Increment counter
-            nIdx = nIdx + 1;
-        end
+        % Increment counter
+        nIdx = nIdx + 1;
+    end
 end
 
 disp(['Number of song-free time periods identified: ', num2str(nIdx)]);
@@ -203,7 +203,7 @@ nNoiseOnlySequences = length(noiseLibrary);
 for i = 1:nNoiseOnlySequences
     % Get wav subdirectory paths
     noiseLibrary(i).wavSubDirPath = fullfile(rawAudioPath, [wav_subdir_prefix, num2str(noiseLibrary(i).Year)], 'wav/');
-    
+
     % Format the datenum as a string
     noiseLibrary(i).startTimeDatestrings = datestr(noiseLibrary(i).startTime_serial_datenum, wav_dateformat_serial);
 end
@@ -221,92 +221,110 @@ switch mode
     case 'serial'
         % Find the latest processed noise file
         latestdatenum = findLatestNoiseFile(noise_lib_path);
-        
-        % Start execution timing
-        tic
+
         % Get then wavs and return the ROI
         for i = 1:nNoiseOnlySequences
             % Skip already processed files
             if ~isempty(latestdatenum) && datenum(noiseLibrary(i).startTimeDatestrings, 'yymmdd-HHMMSS') <= latestdatenum
                 continue;
             end
-        
+
             wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);  % Use the cached list
             wav_filename = find_closest_wav(wavs_filelist, char(noiseLibrary(i).startTimeDatestrings));
-        
+
             if isempty(wavs_filelist)
                 error('No wav files found - Check wav file paths and that storage volume is mounted.')
             end
-        
+
             % Retrieve audio file, trim/append to region of interest, write to struct:
             [audioData, ~, successFlag] = assembleROIAudio(...
                 wavs_filelist, noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTime_serial_datenum, noiseLibrary(i).endTime_serial_datenum);
-        
+
             if successFlag == true
                 fileName = ['DGS_noise_', noiseLibrary(i).startTimeDatestrings, '.wav'];
                 fullNamePath = fullfile(noise_lib_path, fileName);
                 audiowrite(fullNamePath, audioData, Fs);
             end
         end
-        % Stop execution timing
-        toc
+
     case 'parallel'
         % Find the latest processed noise file
         latestdatenum = findLatestNoiseFile(noise_lib_path);
-        
-        tic
-        ticBytes(gcp);
-        
+
+        % Load checkpoint if it exists
+        checkpointFile = 'noise_library_checkpoint.mat';
+        if exist(checkpointFile, 'file')
+            load(checkpointFile, 'lastProcessedIndex');
+            disp(['Resuming from checkpoint: ' num2str(lastProcessedIndex)]);
+        else
+            lastProcessedIndex = 0;
+        end
+
         % Number of noise sequences to process
         numFutures = nNoiseOnlySequences;
-        
-        % Initialize futures array
-        futures = parallel.FevalFuture.empty(numFutures, 0);
-        
+
         % Initialize error logging
         errorLog = cell(numFutures, 1);
-        
-        % Submit parfeval requests
-        for i = 1:numFutures
-            % Skip already processed files
-            if ~isempty(latestdatenum) && datenum(noiseLibrary(i).startTimeDatestrings, 'yymmdd-HHMMSS') <= latestdatenum
-                continue;
-            end
-        
-            wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);
-            futures(i) = parfeval(@processNoiseSequence, 2, i, wavs_filelist, ...
-                noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTime_serial_datenum, ...
-                noiseLibrary(i).endTime_serial_datenum, noiseLibrary(i).startTimeDatestrings, ...
-                noise_lib_path, Fs);
-        end
 
-        % Collect the results
-        for i = 1:numFutures
-            try
-                [completedIdx, successFlag, error_info] = fetchNext(futures);
-                
-                if ~isempty(error_info)
-                    errorLog{completedIdx} = error_info;
-                    fprintf('Warning: Error in sequence %d: %s\n', completedIdx, error_info.message);
-                end
-                
-                % Print progress
-                if mod(i, 100) == 0
-                    fprintf('Processed %d/%d noise sequences\n', i, numFutures);
-                end
-            catch ME
-                fprintf('Error fetching result for sequence %d: %s\n', i, ME.message);
-                errorLog{i} = struct('message', ME.message, 'stack', ME.stack);
-            end
-        end
+        % Process in batches
+        batchSize = 500;
+        batchNum = 1;
+        for batchStart = lastProcessedIndex+1:batchSize:numFutures
+            batchEnd = min(batchStart + batchSize - 1, numFutures);
 
-        tocBytes(gcp)
-        toc
+            % Initialize futures array for this batch
+            futures = parallel.FevalFuture.empty(batchEnd - batchStart + 1, 0);
+
+            % Submit parfeval requests for this batch
+            for i = batchStart:batchEnd
+                % Skip already processed files
+                if ~isempty(latestdatenum) && datenum(noiseLibrary(i).startTimeDatestrings, 'yymmdd-HHMMSS') <= latestdatenum
+                    continue;
+                end
+
+                wavs_filelist = wav_files_cache(noiseLibrary(i).wavSubDirPath);
+                futures(i-batchStart+1) = parfeval(@processNoiseSequence, 2, i, wavs_filelist, ...
+                    noiseLibrary(i).wavSubDirPath, noiseLibrary(i).startTime_serial_datenum, ...
+                    noiseLibrary(i).endTime_serial_datenum, noiseLibrary(i).startTimeDatestrings, ...
+                    noise_lib_path, Fs);
+            end
+
+            % Collect the results for this batch
+            for i = 1:length(futures)
+                try
+                    [completedIdx, successFlag, error_info] = fetchNext(futures);
+
+                    if ~isempty(error_info)
+                        errorLog{completedIdx} = error_info;
+                        fprintf('Warning: Error in sequence %d: %s\n', completedIdx, error_info.message);
+                    end
+
+                    % Print progress
+                    if mod(completedIdx, 50) == 0
+                        fprintf('Processed %d noise sequences of batch %d. Batch size %d.\n', completedIdx, batchNum, batchSize);
+                    end
+
+                    % Save checkpoint every 500 processed items
+                    if mod(completedIdx, 500) == 0
+                        lastProcessedIndex = completedIdx;
+                        save(checkpointFile, 'lastProcessedIndex');
+                    end
+                catch ME
+                    fprintf('Error fetching result for sequence %d: %s\n', batchStart+i-1, ME.message);
+                    errorLog{batchStart+i-1} = struct('message', ME.message, 'stack', ME.stack);
+                end
+            end
+
+            % Clear futures to free up memory
+            clear futures;
+            fprintf('Completed batch %d.\n', batchNum)
+            batchNum = batchNum + 1;
+        end
 
         % Print summary of errors
         errorCount = sum(~cellfun(@isempty, errorLog));
         fprintf('Total errors encountered: %d\n', errorCount);
-        
+
         if errorCount > 0
             fprintf('Error summary:\n');
             for i = 1:length(errorLog)
@@ -315,21 +333,22 @@ switch mode
                 end
             end
         end
-       
+
+        % Remove checkpoint file after successful completion
+        if exist(checkpointFile, 'file')
+            delete(checkpointFile);
+        end
 end
+disp('Noise library construction complete.')
 
-% Randomly select 10 rows from noiseLibrary and plot the spectrogram of the audioData
-nToPlot = 10;
-sampleIndices = randperm(length(noiseLibrary), nToPlot);
-
-for i = 1:nToPlot
-    idx = sampleIndices(i);
-    audio = noiseLibrary(idx).audioData;
-    
-    figure(i)
-    spectrogram(audio, 256, floor(256*0.9), 1024, Fs, 'yaxis');
-    title(sprintf('Sample %d (Year: %d)', i, noiseLibrary(idx).Year));
-    sgtitle('Spectrograms of 10 Random Noise Samples')
+switch mode
+    case 'parallel'
+        disp('Shutting down parallel Pool. End Process.')
+        
+        % Shut down parallel pool
+        delete(gcp)
+    case 'serial'
+        disp('End Process.')
 end
 
 % End logging
@@ -357,7 +376,11 @@ successFlag = true;
 audioData = [];
 wav_datestring_format = 'yyMMdd-HHmmss';
 max_attempts = 2;
-retry_delay = 2; % seconds
+retry_delay = 2; % seconds  
+% Initialize variables for size tracking
+MAX_FILE_SIZE_GB = 0.5;
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_GB * 1e+9;  % 2GB in bytes
+current_size_bytes = 0;
 
 % Convert datenum times to datenum
 ROI_start_datetime = datetime(ROI_start_serial_datenum, 'ConvertFrom', 'datenum');
@@ -385,16 +408,16 @@ for i = 1:length(wavs_filelist)
 
     % Calculate the number of bytes per sample
     bytes_per_sample = bit_depth / 8;
-    
+
     % Calculate the number of samples (subtract 44 bytes for WAV header)
     num_samples = (wavs_filelist(i).bytes - 44) / bytes_per_sample;
-    
+
     % Calculate the file duration in seconds
     file_duration = num_samples / Fs;
 
     % Calculate file end time
     file_end_datetime = file_start_datetime + seconds(file_duration);
-    
+
     % If the file start and end are within the ROI start and end, mark as
     % relevant:
     if (file_start_datetime <= ROI_end_datetime && file_end_datetime >= ROI_start_datetime)
@@ -409,7 +432,7 @@ relevant_files = relevant_files(sort_idx);
 % Read and assemble audio data
 for i = 1:length(relevant_files)
     file_path = fullfile(read_folder, relevant_files(i).name);
-    
+
     for attempt = 1:max_attempts
         try
             [audio, Fs] = audioread(file_path);
@@ -427,21 +450,38 @@ for i = 1:length(relevant_files)
             end
         end
     end
-    
+
     % Determine start and end samples for this file
     file_start_str = extractAfter(relevant_files(i).name, "H08S1_");
     file_start_datetime = datetime(file_start_str(1:end-4), 'InputFormat', wav_datestring_format);
     file_duration = seconds(length(audio) / Fs);
     file_end_datetime = file_start_datetime + file_duration;
-    
+
     % Calculate start and end samples as integers
     start_sample = max(1, round(seconds(ROI_start_datetime - file_start_datetime) * Fs) + 1);
     end_sample = min(length(audio), round(seconds(ROI_end_datetime - file_start_datetime) * Fs) + 1);
-    
+
+    % Calculate the size of the audio segment in bytes
+    segment_size_bytes = (end_sample - start_sample + 1) * bytes_per_sample;
+
+    % Check if adding this segment would exceed the size limit
+    if current_size_bytes + segment_size_bytes > MAX_FILE_SIZE_BYTES
+        warning('Reached 2GB limit. Truncating audio data.');
+        break;
+    end
+
     % Append relevant audio data
     if start_sample <= length(audio) && end_sample >= 1
-        audioData = [audioData; audio(start_sample:end_sample)];
+        segment = audio(start_sample:end_sample);
+        audioData = [audioData; segment];
+        current_size_bytes = current_size_bytes + segment_size_bytes;
     end
+
+    % Check if we've reached the ROI end
+    if file_end_datetime >= ROI_end_datetime
+        break;
+    end
+
 end
 
 % Check if we have assembled any audio data
@@ -451,6 +491,8 @@ if isempty(audioData)
     return;
 end
 
+successFlag = true;
+
 % Remove DC offset
 audioData = audioData - mean(audioData);
 
@@ -459,53 +501,53 @@ end
 function [successFlag, error_info] = processNoiseSequence(i, wavs_filelist, ...
     wavSubDirPath, startTime_serial_datenum, endTime_serial_datenum, startTimeDatestrings, ...
     noise_lib_path, Fs)
-    
-    error_info = [];
-    
-    try
-        if isempty(wavs_filelist)
-            error('No wav files found - Check wav file paths and that storage volume is mounted.')
-        end
-        
-        % Retrieve audio file, trim/append to region of interest
-        [audioData, ~, retrievalSuccessFlag] = assembleROIAudio(...
-            wavs_filelist, wavSubDirPath, startTime_serial_datenum, endTime_serial_datenum);
-        
-        if retrievalSuccessFlag
-            fileName = ['DGS_noise_', startTimeDatestrings, '.wav'];
-            fullNamePath = fullfile(noise_lib_path, fileName);
-            audiowrite(fullNamePath, audioData, Fs);
-            successFlag = true;
-            fprintf('Wrote File %d to disk at %s.\n', i, fullNamePath)
-        else
-            error('Failed to retrieve audio data for noise sequence %d', i);
-        end
-    catch ME
-        successFlag = false;
-        error_info = struct('message', ME.message, 'stack', ME.stack);
+
+error_info = [];
+
+try
+    if isempty(wavs_filelist)
+        error('No wav files found - Check wav file paths and that storage volume is mounted.')
     end
+
+    % Retrieve audio file, trim/append to region of interest
+    [audioData, ~, retrievalSuccessFlag] = assembleROIAudio(...
+        wavs_filelist, wavSubDirPath, startTime_serial_datenum, endTime_serial_datenum);
+
+    if retrievalSuccessFlag
+        fileName = ['DGS_noise_', startTimeDatestrings, '.wav'];
+        fullNamePath = fullfile(noise_lib_path, fileName);
+        audiowrite(fullNamePath, audioData, Fs);
+        successFlag = true;
+        fprintf('Wrote File %d to disk at %s.\n', i, fullNamePath)
+    else
+        error('Failed to retrieve audio data for noise sequence %d', i);
+    end
+catch ME
+    successFlag = false;
+    error_info = struct('message', ME.message, 'stack', ME.stack);
+end
 end
 
 function latestDateTime = findLatestNoiseFile(folderPath)
-    % Find the latest processed noise file based on the date-time in the filename
-    
-    % Get all WAV files in the folder
-    files = dir(fullfile(folderPath, 'DGS_noise_*.wav'));
-    
-    % If no files found, return empty
-    if isempty(files)
-        latestDateTime = [];
-        return;
-    end
-    
-    % Extract date-times from filenames
-    dateTimes = zeros(length(files), 1);
-    for i = 1:length(files)
-        % Extract the date-time after 'DGS_noise_'
-        parts = strsplit(files(i).name, '_');
-        dateTimes(i) = datenum(parts{3}(1:end-4), 'yyMMdd-HHmmSS');
-    end
-    
-    % The largest date-time is the latest processed file
-    latestDateTime = max(dateTimes);
+% Find the latest processed noise file based on the date-time in the filename
+
+% Get all WAV files in the folder
+files = dir(fullfile(folderPath, 'DGS_noise_*.wav'));
+
+% If no files found, return empty
+if isempty(files)
+    latestDateTime = [];
+    return;
+end
+
+% Extract date-times from filenames
+dateTimes = zeros(length(files), 1);
+for i = 1:length(files)
+    % Extract the date-time after 'DGS_noise_'
+    parts = strsplit(files(i).name, '_');
+    dateTimes(i) = datenum(parts{3}(1:end-4), 'yyMMdd-HHmmSS');
+end
+
+% The largest date-time is the latest processed file
+latestDateTime = max(dateTimes);
 end
